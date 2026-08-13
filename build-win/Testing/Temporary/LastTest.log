@@ -1,0 +1,24 @@
+Start testing: Aug 13 22:51 GMT Summer Time
+----------------------------------------------------------
+1/1 Testing: unit
+1/1 Test: unit
+Command: "C:/Users/Georgiy/Documents/dev/nn library/build-win/test_all.exe"
+Directory: C:/Users/Georgiy/Documents/dev/nn library/build-win
+"unit" start time: Aug 13 22:51 GMT Summer Time
+Output:
+----------------------------------------------------------
+[ RUN ] smoke
+[ OK ] smoke
+[ RUN ] version
+[ OK ] version
+
+2 test(s) run, 0 failed, 0 assertion failure(s)
+<end of output>
+Test time =   0.03 sec
+----------------------------------------------------------
+Test Passed.
+"unit" end time: Aug 13 22:51 GMT Summer Time
+"unit" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Aug 13 22:51 GMT Summer Time
