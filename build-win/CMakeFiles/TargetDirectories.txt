@@ -1,5 +1,0 @@
-C:/Users/Georgiy/Documents/dev/nn library/build-win/CMakeFiles/nn.dir
-C:/Users/Georgiy/Documents/dev/nn library/build-win/CMakeFiles/test_all.dir
-C:/Users/Georgiy/Documents/dev/nn library/build-win/CMakeFiles/test.dir
-C:/Users/Georgiy/Documents/dev/nn library/build-win/CMakeFiles/edit_cache.dir
-C:/Users/Georgiy/Documents/dev/nn library/build-win/CMakeFiles/rebuild_cache.dir
