@@ -1,4 +1,5 @@
 #include "test_harness.h"
+#include "utilities.h"
 
 #include <nn/core/rng.h>
 #include <nn/kernels/kernel_api.h>
@@ -8,12 +9,6 @@ nn::kernels::GemmFn gemm() {
   const auto& k = nn::kernels::kernels(nn::Device::CPU);
   NN_CHECK(k.gemm != nullptr);
   return k.gemm;
-}
-
-void fill_random(std::vector<float>& data, nn::Pcg32& rng) {
-  for (auto& x : data) {
-    x = rng.next_normal();
-  }
 }
 
 void ref_gemm(const float* A, const float* B, float* C, int M, int N, int K) {

@@ -55,6 +55,9 @@ void register_naive_kernels() {
   t.scale = &naive_scale;
   t.axpy = &naive_axpy;
   t.fill = &naive_fill;
+  // softmax cross-entropy
+  t.softmax_ce = &naive_softmax_ce;
+  t.softmax_ce_backward = &naive_softmax_ce_backward;
 
   g_backend[index_of(Device::CPU)] = "naive";
 }
