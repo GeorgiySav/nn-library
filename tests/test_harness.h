@@ -4,6 +4,7 @@
 #include <cstring>
 #include <string>
 #include <vector>
+#include <stdexcept>
 
 namespace nn::test {
 
@@ -62,4 +63,11 @@ inline int run_all(int argc, char** argv) {
       ::nn::test::report(__FILE__, __LINE__,                             \
         "NN_CHECK_CLOSE(" #a ", " #b "): " + std::to_string(a_) + " vs " \
         + std::to_string(b_) + " (rel " + std::to_string(r_) + ")");     \
+  } while (0)
+
+#define NN_CHECK_THROWS(expr, exception_type) \
+  do { \
+    bool threw = false; \
+    try { expr; } catch (const exception_type&) { threw = true; } \
+    if (!threw) ::nn::test::report(__FILE__, __LINE__, "NN_CHECK_THROWS(" #expr ", " #exception_type ")"); \
   } while (0)
