@@ -45,6 +45,16 @@ const char* active_backend_name(Device d) {
 void register_naive_kernels() {
   KernelTable& t = table(Device::CPU);
   t.gemm = &naive_gemm;
+  // reduce
+  t.add_row_bias = &naive_add_row_bias;
+  t.col_sum = &naive_col_sum;
+  // elementwise
+  t.relu = &naive_relu;
+  t.relu_backward = &naive_relu_backward;
+  t.add = &naive_add;
+  t.scale = &naive_scale;
+  t.axpy = &naive_axpy;
+  t.fill = &naive_fill;
 
   g_backend[index_of(Device::CPU)] = "naive";
 }
