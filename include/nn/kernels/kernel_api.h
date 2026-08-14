@@ -1,0 +1,43 @@
+#pragma once
+
+#include <cstdint>
+
+#include <nn/core/device.h>
+
+namespace nn::kernels {
+
+using GemmFn = void(*)(const float* A, const float* B, float*C, int M, int N, int K, bool transA, bool transB);
+using AddRowBiasFn = void(*)(const float* X, const float* b, float* Y, int M, int N);
+using ColSumFn = void(*)(const float* X, float* out, int M, int N);
+using ReluFn = void(*)(const float* X, float* Y, int64_t n);
+using ReluBackwardFn = void(*)(const float* X, const float* gY, float* gX, int64_t n);
+using AddFn = void(*)(const float* A, const float* B, float* C, int64_t n);
+using ScaleFn = void(*)(float alpha, float* X, int64_t n);
+using AxpyFn = void(*)(float alpha, const float* X, float* Y, int64_t n);
+using FillFn = void(*)(float v, float* X, int64_t n);
+using SoftmaxCeFn = void(*)(const float* logits, const int32_t* labels, float* loss_out, float* probs, int M, int N);
+using SoftmaxCeBackwardFn = void(*)(const float* probs, const int32_t* labels, float g_loss, float* g_logits, int M, int N);
+using AdamStepFn = void(*)(float* p, const float* g, float* m, float* v, float lr, float b1, float b2, float eps, float bc1, int64_t n);
+
+struct KernelTable {
+  GemmFn gemm = nullptr;
+  AddRowBiasFn add_row_bias = nullptr;
+  ColSumFn col_sum = nullptr;
+  ReluFn relu = nullptr;
+  ReluBackwardFn relu_backward = nullptr;
+  AddFn add = nullptr;
+  ScaleFn scale = nullptr;
+  AxpyFn axpy = nullptr;
+  FillFn fill = nullptr;
+  SoftmaxCeFn softmax_ce = nullptr;
+  SoftmaxCeBackwardFn softmax_ce_backward = nullptr;
+  AdamStepFn adam_step = nullptr;
+};
+
+KernelTable& table(Device d);
+const KernelTable& kernels(Device d);
+void register_naive_kernels();
+void init_kernels();
+const char* active_backend_name(Device d);
+
+}
