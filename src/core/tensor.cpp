@@ -1,6 +1,7 @@
 #include <nn/core/tensor.h>
 
 #include <cassert>
+#include <stdexcept>
 
 namespace nn {
 
@@ -69,9 +70,9 @@ Tensor Tensor::to(Device d) const {
   if (device() == d) {
     return *this;
   }
-  Tensor t(shape_, d, dtype_);
-  std::memcpy(t.raw(), raw(), numel() * dtype_size(dtype_));
-  return t;
+  if (d == Device::CUDA) {
+    throw std::runtime_error("CUDA device not supported yet");
+  }
 }
 
 Tensor Tensor::clone() const {
@@ -101,9 +102,8 @@ Tensor& Tensor::grad() {
 }
 
 void Tensor::zero_grad() {
-  if (meta_ && meta_->grad.defined()) {
-    std::memset(meta_->grad.raw(), 0, meta_->grad.numel() * dtype_size(meta_->grad.dtype()));
-  }
+  ensure_meta();
+  std::memset(meta_->grad.raw(), 0, meta_->grad.numel() * dtype_size(dtype_));
 }
 
 }
