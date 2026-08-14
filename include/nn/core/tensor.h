@@ -20,6 +20,8 @@ public:
   static Tensor full(Shape s, float value, Device d = Device::CPU, DType t = DType::F32);
   static Tensor randn(Shape s, Pcg32& rng, float stddev, Device d = Device::CPU, DType t = DType::F32);
   static Tensor scalar(float v, Device d = Device::CPU, DType t = DType::F32);
+  static Tensor from(std::initializer_list<float> values, Device d = Device::CPU, DType t = DType::F32);
+  static Tensor from(std::initializer_list<std::initializer_list<float>> rows, Device d = Device::CPU, DType t = DType::F32);
 
   const Shape& shape() const { return shape_; }
   int64_t numel() const { return shape_.numel(); }

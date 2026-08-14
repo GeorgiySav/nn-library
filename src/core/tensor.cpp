@@ -41,6 +41,31 @@ Tensor Tensor::scalar(float v, Device d, DType t) {
   return s;
 }
 
+Tensor Tensor::from(std::initializer_list<float> values, Device d, DType t) {
+  Tensor r(Shape({static_cast<int>(values.size())}), d, t);
+  float* out = r.data();
+  size_t i = 0;
+  for (float v : values) {
+    out[i++] = v;
+  }
+  return r;
+}
+
+Tensor Tensor::from(std::initializer_list<std::initializer_list<float>> rows, Device d, DType t) {
+  Tensor r(Shape({static_cast<int>(rows.size()),
+                   rows.size() ? static_cast<int>(rows.begin()->size()) : 0}),
+           d, t);
+  float* out = r.data();
+  size_t i = 0;
+  for (const auto& row : rows) {
+    assert(row.size() == rows.begin()->size() && "ragged nested initializer list");
+    for (float v : row) {
+      out[i++] = v;
+    }
+  }
+  return r;
+}
+
 float* Tensor::data() const {
   return static_cast<float*>(storage_->data());
 }
