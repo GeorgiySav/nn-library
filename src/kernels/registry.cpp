@@ -27,6 +27,11 @@ KernelTable& table(Device d) {
 }
 
 const KernelTable& kernels(Device d) {
+  // Idempotent and thread-safe via the function-local static in init_kernels.
+  // Note table() must NOT do this: register_naive_kernels() calls it, and
+  // re-entering init_kernels() during its own initialisation is UB.
+  init_kernels();
+
   int idx = index_of(d);
   if (idx < 0 || idx >= kNumDevices) {
     throw std::runtime_error("Invalid device");
@@ -48,6 +53,7 @@ void register_naive_kernels() {
   // reduce
   t.add_row_bias = &naive_add_row_bias;
   t.col_sum = &naive_col_sum;
+  t.argmax_rows = &naive_argmax_rows;
   // elementwise
   t.relu = &naive_relu;
   t.relu_backward = &naive_relu_backward;

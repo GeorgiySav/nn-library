@@ -20,4 +20,15 @@ void naive_add_row_bias(const float* X, const float* b, float* Y, int M, int N) 
   }
 }
 
+void naive_argmax_rows(const float* X, int32_t* out, int M, int N) {
+  for (int i = 0; i < M; ++i) {
+    const float* row = X + int64_t(i) * N;
+    int best = 0;
+    for (int j = 1; j < N; ++j) {
+      if (row[j] > row[best]) best = j;
+    }
+    out[i] = int32_t(best);
+  }
+}
+
 }

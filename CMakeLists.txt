@@ -10,6 +10,8 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
 endif()
 
+option(NN_BUILD_EXAMPLES "Build example programs" ON)
+
 add_library(nn_flags INTERFACE)
 
 if(CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
@@ -45,3 +47,17 @@ add_executable(test_all ${TEST_SOURCES})
 target_link_libraries(test_all PRIVATE nn)
 target_include_directories(test_all PRIVATE tests)
 add_test(NAME unit COMMAND test_all)
+
+if(NN_BUILD_EXAMPLES)
+  file(GLOB EXAMPLE_DIRS CONFIGURE_DEPENDS
+       RELATIVE ${CMAKE_SOURCE_DIR}/examples ${CMAKE_SOURCE_DIR}/examples/*)
+  foreach(name ${EXAMPLE_DIRS})
+    if(IS_DIRECTORY ${CMAKE_SOURCE_DIR}/examples/${name})
+      file(GLOB srcs CONFIGURE_DEPENDS examples/${name}/*.cpp)
+      add_executable(example_${name} ${srcs})
+      target_link_libraries(example_${name} PRIVATE nn)
+      target_compile_definitions(example_${name} PRIVATE
+        NN_PROJECT_ROOT="${CMAKE_SOURCE_DIR}")
+    endif()
+  endforeach()
+endif()

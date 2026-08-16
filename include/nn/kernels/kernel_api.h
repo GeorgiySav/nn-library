@@ -19,6 +19,7 @@ using SoftmaxCeFn = void(*)(const float* logits, const int32_t* labels, float* l
 using SoftmaxCeBackwardFn = void(*)(const float* probs, const int32_t* labels,
                                     const float* g_loss, float* g_logits, int M, int N);
 using AdamStepFn = void(*)(float* p, const float* g, float* m, float* v, float lr, float b1, float b2, float eps, float bc1, int64_t n);
+using ArgmaxRowsFn = void(*)(const float* X, int32_t* out, int M, int N);
 
 struct KernelTable {
   GemmFn gemm = nullptr;
@@ -33,6 +34,7 @@ struct KernelTable {
   SoftmaxCeFn softmax_ce = nullptr;
   SoftmaxCeBackwardFn softmax_ce_backward = nullptr;
   AdamStepFn adam_step = nullptr;
+  ArgmaxRowsFn argmax_rows = nullptr;
 };
 
 KernelTable& table(Device d);

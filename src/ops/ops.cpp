@@ -148,4 +148,12 @@ Tensor softmax_ce_backward(const Tensor& probs, const Tensor& labels, const Tens
   return g_logits;
 }
 
+Tensor argmax_rows(const Tensor& x) {
+  if (x.shape().rank() != 2) throw std::invalid_argument("argmax rows: x must be 2D");
+  Tensor out(Shape{x.shape().dim(0)}, x.device(), DType::I32);
+  const auto& k = kernels::kernels(x.device());
+  k.argmax_rows(x.data(), out.data_i32(), x.shape().dim(0), x.shape().dim(1));
+  return out;
+}
+
 }
