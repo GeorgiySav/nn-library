@@ -16,7 +16,8 @@ using ScaleFn = void(*)(float alpha, float* X, int64_t n);
 using AxpyFn = void(*)(float alpha, const float* X, float* Y, int64_t n);
 using FillFn = void(*)(float v, float* X, int64_t n);
 using SoftmaxCeFn = void(*)(const float* logits, const int32_t* labels, float* loss_out, float* probs, int M, int N);
-using SoftmaxCeBackwardFn = void(*)(const float* probs, const int32_t* labels, float g_loss, float* g_logits, int M, int N);
+using SoftmaxCeBackwardFn = void(*)(const float* probs, const int32_t* labels,
+                                    const float* g_loss, float* g_logits, int M, int N);
 using AdamStepFn = void(*)(float* p, const float* g, float* m, float* v, float lr, float b1, float b2, float eps, float bc1, int64_t n);
 
 struct KernelTable {

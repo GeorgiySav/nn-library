@@ -22,6 +22,7 @@ public:
   static Tensor scalar(float v, Device d = Device::CPU, DType t = DType::F32);
   static Tensor from(std::initializer_list<float> values, Device d = Device::CPU, DType t = DType::F32);
   static Tensor from(std::initializer_list<std::initializer_list<float>> rows, Device d = Device::CPU, DType t = DType::F32);
+  static Tensor from_i32(std::initializer_list<int32_t> values, Device d = Device::CPU, DType t = DType::I32);
 
   const Shape& shape() const { return shape_; }
   int64_t numel() const { return shape_.numel(); }
@@ -42,7 +43,8 @@ public:
   bool requires_grad() const;
   void set_requires_grad(bool requires_grad);
   AutogradMeta* meta() const { return meta_.get(); }
-  AutogradMeta& ensure_meta();
+  const std::shared_ptr<AutogradMeta>& ensure_meta_shared() const;
+  AutogradMeta& ensure_meta() const { return *ensure_meta_shared(); };
   Tensor& grad();
   void zero_grad();
 
@@ -50,13 +52,14 @@ private:
   std::shared_ptr<Storage> storage_;
   Shape shape_;
   DType dtype_ = DType::F32;
-  std::shared_ptr<AutogradMeta> meta_;
+  mutable std::shared_ptr<AutogradMeta> meta_;
 };
 
 struct AutogradMeta {
   bool requires_grad = false;
   Tensor grad;
   int node_id = -1;
+  uint64_t tape_epoch = 0; // 0 == never recorded on any tape
 };
 
 }

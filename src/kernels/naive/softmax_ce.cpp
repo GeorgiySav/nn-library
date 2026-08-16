@@ -5,7 +5,8 @@
 
 namespace nn::kernels {
 
-void naive_softmax_ce(const float* logits, const int32_t* labels, float* loss_out, float* probs, int M, int N) {
+void naive_softmax_ce(const float* logits, const int32_t* labels,
+                      float* loss_out, float* probs, int M, int N) {
   /*
   logits: [M, N]
   labels: [M] (int32)
@@ -52,7 +53,8 @@ void naive_softmax_ce(const float* logits, const int32_t* labels, float* loss_ou
   *loss_out = (M > 0) ? total_loss / static_cast<float>(M) : 0.0f;
 }
 
-void naive_softmax_ce_backward(const float* probs, const int32_t* labels, float g_loss, float* g_logits, int M, int N) {
+void naive_softmax_ce_backward(const float* probs, const int32_t* labels,
+                               const float* g_loss, float* g_logits, int M, int N) {
   /*
   probs: [M, N] (softmax probabilities)
   labels: [M] (int32)
@@ -61,7 +63,7 @@ void naive_softmax_ce_backward(const float* probs, const int32_t* labels, float 
   */
   assert(M >= 0 && N > 0);
 
-  const float scale = (M > 0) ? g_loss / static_cast<float>(M) : 0.0f;
+  const float scale = (M > 0) ? *g_loss / static_cast<float>(M) : 0.0f;
 
   for (int i{0}; i < M; ++i) {
     const float* p = probs + static_cast<int64_t>(i) * N;

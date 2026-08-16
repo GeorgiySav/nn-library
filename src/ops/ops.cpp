@@ -130,4 +130,22 @@ void softmax_ce(const Tensor& logits, const Tensor& labels, Tensor& loss_out, Te
   k.softmax_ce(logits.data(), labels.data_i32(), loss_out.data(), probs.data(), logits.shape().dim(0), logits.shape().dim(1));
 }
 
+Tensor softmax_ce_backward(const Tensor& probs, const Tensor& labels, const Tensor& g_loss) {
+  if (probs.shape().rank() != 2 || labels.shape().rank() != 1) {
+    throw std::invalid_argument("probs must be 2D and labels must be 1D");
+  }
+  if (probs.shape().dim(0) != labels.shape().dim(0)) {
+    throw std::invalid_argument("Number of samples in probs and lebls must match");
+  }
+  if (g_loss.shape().rank() != 0) {
+    throw std::invalid_argument("g_loss must be a scalar tensor");
+  }
+
+  Tensor g_logits(probs.shape(), probs.device(), probs.dtype());
+  const auto& k = nn::kernels::kernels(g_logits.device());
+  k.softmax_ce_backward(probs.data(), labels.data_i32(), g_loss.data(),
+                        g_logits.data(), probs.shape().dim(0), probs.shape().dim(1));
+  return g_logits;
+}
+
 }

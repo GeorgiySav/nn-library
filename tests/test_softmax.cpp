@@ -120,7 +120,8 @@ NN_TEST(test_backward_against_finite_difference) {
   std::vector<float> g_logits(M*N, -1.0f);
   const auto& k = nn::kernels::kernels(nn::Device::CPU);
   NN_CHECK(k.softmax_ce_backward != nullptr);
-  k.softmax_ce_backward(probs.data(), labels.data(), 1.0f, g_logits.data(), M, N);
+  float g_loss = 1.0f;
+  k.softmax_ce_backward(probs.data(), labels.data(), &g_loss, g_logits.data(), M, N);
 
   const float h = 1e-3f;
   for (int i{0}; i < M*N; ++i) {
@@ -158,7 +159,8 @@ NN_TEST(test_gradient_rows_sum_to_zero) {
   std::vector<float> g_logits(M*N, -1.0f);
   const auto& k = nn::kernels::kernels(nn::Device::CPU);
   NN_CHECK(k.softmax_ce_backward != nullptr);
-  k.softmax_ce_backward(probs.data(), labels.data(), 1.0f, g_logits.data(), M, N);
+  float g_loss = 1.0f;
+  k.softmax_ce_backward(probs.data(), labels.data(), &g_loss, g_logits.data(), M, N);
 
   for (int i{0}; i < M; ++i) {
     float row_sum = 0.0f;

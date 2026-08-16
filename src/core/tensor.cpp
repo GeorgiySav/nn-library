@@ -66,6 +66,16 @@ Tensor Tensor::from(std::initializer_list<std::initializer_list<float>> rows, De
   return r;
 }
 
+Tensor Tensor::from_i32(std::initializer_list<int32_t> values, Device d, DType t) {
+  Tensor r(Shape({static_cast<int>(values.size())}), d, t);
+  int32_t* out = r.data_i32();
+  size_t i = 0;
+  for (int32_t v : values) {
+    out[i++] = v;
+  }
+  return r;
+}
+
 float* Tensor::data() const {
   return static_cast<float*>(storage_->data());
 }
@@ -111,24 +121,30 @@ bool Tensor::requires_grad() const {
 }
 
 void Tensor::set_requires_grad(bool requires_grad) {
-  ensure_meta().requires_grad = requires_grad;
+  AutogradMeta& m = ensure_meta();
+  m.requires_grad = requires_grad;
+  // parameters get one persistent buffer, reused for life
+  if (requires_grad && !m.grad.defined()) {
+    m.grad = Tensor::zeros(shape_, device(), dtype_);
+  }
 }
 
-AutogradMeta& Tensor::ensure_meta() {
+const std::shared_ptr<AutogradMeta>& Tensor::ensure_meta_shared() const {
   if (!meta_) {
     meta_ = std::make_shared<AutogradMeta>();
-    meta_->grad = Tensor::zeros(shape_, device(), dtype_);
   }
-  return *meta_;
+  return meta_;
 }
 
 Tensor& Tensor::grad() {
-  return ensure_meta().grad;
+  AutogradMeta& m = ensure_meta();
+  if (!m.grad.defined()) m.grad = Tensor::zeros(shape_, device(), dtype_);
+  return m.grad;
 }
 
 void Tensor::zero_grad() {
-  ensure_meta();
-  std::memset(meta_->grad.raw(), 0, meta_->grad.numel() * dtype_size(dtype_));
+  if (meta_ && meta_->grad.defined())
+    std::memset(meta_->grad.raw(), 0, meta_->grad.numel() * dtype_size(dtype_));
 }
 
 }

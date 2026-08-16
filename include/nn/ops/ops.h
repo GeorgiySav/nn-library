@@ -17,6 +17,6 @@ void   axpy_inplace(Tensor& y, float alpha, const Tensor& x);
 void   fill_inplace(Tensor& a, float v);
 void   softmax_ce(const Tensor& logits, const Tensor& labels, Tensor& loss_out, Tensor& probs);
 
-Tensor softmax_ce_backward(const Tensor& probs, const Tensor& labels, float g_loss);
+Tensor softmax_ce_backward(const Tensor& probs, const Tensor& labels, const Tensor& g_loss);
 
 }

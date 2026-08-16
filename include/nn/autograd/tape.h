@@ -13,21 +13,34 @@ using BackwardFn = std::function<void(const Tensor& g_out, std::span<Tensor> g_i
 struct Node {
   BackwardFn backward;
   nn::SmallVec<int, 3> inputs; // node ids
-  Tensor* leaf = nullptr;      // non-null -> accumulate g_out into leaf->grad
+  std::shared_ptr<AutogradMeta> leaf; // non-null -> accumulate into leaf->grad
   const char* name = "";       // for debugging
 };
 
 class Tape {
 public:
-  int record(BackwardFn fn, SmallVec<int, 3> inputs, const char* name);
-  int record_leaf(Tensor* param);
-  void backward(const Tensor& loss);
-  void clear();
-  int size() const;
+  Tape();
+  ~Tape();
 
+  // recording
+  int node_for(const Tensor& t); // resolve an input to a node id, or -1
+  int record(BackwardFn fn, SmallVec<int, 3> inputs, const char* name);
+  void set_producer(Tensor& out, int id);
+
+  void backward(const Tensor& loss, bool retain_graph = false);
+  void clear();
+  int size() const;  
+  
 private:
+  int record_leaf(std::shared_ptr<AutogradMeta> m);
+  // true if 'm' was stamped by this tape
+  bool owns(const AutogradMeta& m) const;
+  // stamp a tensor's meat as produced by a node 'id' on this tape
+  void bind(AutogradMeta& m, int id) const;
+
   std::vector<Node> nodes_;
   std::vector<Tensor> grads_;
+  uint64_t epoch_ = 0;
 };
 
 class TapeScope {
