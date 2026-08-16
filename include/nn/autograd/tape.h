@@ -56,7 +56,8 @@ public:
   void backward(const Tensor& loss, bool retain_graph = false);
   void clear();
   int size() const;  
-  
+ 
+  size_t arena_size() const { return arena_.bytes_reserved(); }
 private:
   int record_leaf(std::shared_ptr<AutogradMeta> m);
   // true if 'm' was stamped by this tape

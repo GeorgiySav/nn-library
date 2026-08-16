@@ -11,6 +11,7 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 
 option(NN_BUILD_EXAMPLES "Build example programs" ON)
+option(NN_BUILD_BENCH "Build benchmarks" ON)
 
 add_library(nn_flags INTERFACE)
 
@@ -59,5 +60,15 @@ if(NN_BUILD_EXAMPLES)
       target_compile_definitions(example_${name} PRIVATE
         NN_PROJECT_ROOT="${CMAKE_SOURCE_DIR}")
     endif()
+  endforeach()
+endif()
+
+if(NN_BUILD_BENCH)
+  file(GLOB BENCH_SOURCES CONFIGURE_DEPENDS bench/*.cpp)
+  foreach(src ${BENCH_SOURCES})
+    get_filename_component(name "${src}" NAME_WE)
+    add_executable(${name} "${src}")
+    target_link_libraries(${name} PRIVATE nn)
+    target_include_directories(${name} PRIVATE bench)
   endforeach()
 endif()

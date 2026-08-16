@@ -44,15 +44,7 @@ bool grad_enabled() {
 }
 
 Tape::Tape() : epoch_(next_epoch()) {}
-Tape::~Tape() {
-  for (Node& n : nodes_) {
-    if (n.destroy) n.destroy(n.captures);
-  }
-  nodes_.clear();
-  grads_.clear();
-  arena_.reset();
-  epoch_ = next_epoch();
-}
+Tape::~Tape() { clear(); }
 
 int Tape::node_for(const Tensor& t) {
   AutogradMeta* m = t.meta();
@@ -141,8 +133,12 @@ void Tape::backward(const Tensor& loss, bool retain_graph) {
 }
 
 void Tape::clear() {
+  for (Node& n : nodes_) {
+    if (n.destroy) n.destroy(n.captures);
+  }
   nodes_.clear();
   grads_.clear();
+  arena_.reset();
   epoch_ = next_epoch(); // makes every stamped node_id stale
 }
 

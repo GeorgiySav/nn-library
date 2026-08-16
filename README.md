@@ -14,3 +14,12 @@ cmake -S . -B build-rel -G Ninja -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE
 cmake --build build-rel --target example_mnist
 .\build-rel\example_mnist.exe
 ```
+
+## benchmarking
+
+```bash
+cmake -S . -B build-rel -G Ninja -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Release
+cmake --build build-rel --target bench_gemm bench_tape
+.\build-rel\bench_gemm.exe
+.\build-rel\bench_tape.exe
+```

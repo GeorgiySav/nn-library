@@ -8,10 +8,10 @@ namespace nn::autograd {
 
 namespace {
 
-template<class... Ts>
+template<class F, class... Ts>
 void record_op(Tensor& out,
                const char* name,
-               BackwardFn fn,
+               F&& fn,
                const Ts&... ins) {
   Tape* tape = active_tape();
   if (!tape) return;
@@ -26,7 +26,7 @@ void record_op(Tensor& out,
 
   if (!any_tracked) return; // inference
 
-  tape->set_producer(out, tape->record(std::move(fn), ids, name));
+  tape->set_producer(out, tape->record(std::forward<F>(fn), ids, name));
 }
 
 }
