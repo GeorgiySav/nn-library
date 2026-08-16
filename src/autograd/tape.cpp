@@ -44,17 +44,14 @@ bool grad_enabled() {
 }
 
 Tape::Tape() : epoch_(next_epoch()) {}
-Tape::~Tape() { clear(); }
-
-int Tape::record(BackwardFn fn, SmallVec<int, 3> inputs, const char* name) {
-  int id = static_cast<int>(nodes_.size());
-  for (int input_id : inputs) {
-    if (!(input_id == -1 || (input_id >= 0 && input_id < id))) {
-      throw std::invalid_argument("input node id is out of range");
-    }
+Tape::~Tape() {
+  for (Node& n : nodes_) {
+    if (n.destroy) n.destroy(n.captures);
   }
-  nodes_.push_back({fn, inputs, nullptr, name});
-  return id;
+  nodes_.clear();
+  grads_.clear();
+  arena_.reset();
+  epoch_ = next_epoch();
 }
 
 int Tape::node_for(const Tensor& t) {
@@ -83,7 +80,10 @@ int Tape::record_leaf(std::shared_ptr<AutogradMeta> m) {
   }
 
   int id = static_cast<int>(nodes_.size());
-  nodes_.push_back({nullptr, {}, std::move(m), "leaf"});
+  nodes_.push_back(Node{
+    .leaf = std::move(m),
+    .name = "leaf"
+  });
   bind(*nodes_[id].leaf, id);
   return id;
 }
@@ -101,6 +101,9 @@ void Tape::backward(const Tensor& loss, bool retain_graph) {
   grads_.assign(nodes_.size(), Tensor{});
   grads_[loss.meta()->node_id] = Tensor::scalar(1.0f, loss.device(), loss.dtype());
 
+  std::vector<Tensor> g_in;
+  g_in.reserve(4);
+
   for (int i{static_cast<int>(nodes_.size()) - 1}; i >= 0; --i) {
     if (!grads_[i].defined()) {
       continue;
@@ -114,9 +117,8 @@ void Tape::backward(const Tensor& loss, bool retain_graph) {
       }
     }
     else {
-      std::vector<Tensor> g_in(nodes_[i].inputs.size());
-
-      nodes_[i].backward(grads_[i], g_in);
+      g_in.assign(nodes_[i].inputs.size(), Tensor{});
+      nodes_[i].backward(nodes_[i].captures, grads_[i], g_in);
 
       for (int k{0}; k < static_cast<int>(nodes_[i].inputs.size()); ++k) {
         int input_id = nodes_[i].inputs[k];
