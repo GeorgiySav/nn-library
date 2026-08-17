@@ -10,37 +10,103 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
 endif()
 
+option(NN_WITH_CUDA "Build the CUDA backend" ON)
+
 option(NN_BUILD_EXAMPLES "Build example programs" ON)
 option(NN_BUILD_BENCH "Build benchmarks" ON)
 
 add_library(nn_flags INTERFACE)
 
+# These are host-compiler flags. nvcc forwards options it does not recognise
+# straight through to its host compiler (MSVC on Windows), so they must be
+# scoped to CXX or the first .cu file fails with
+#   cl : Command line error D8021 : invalid numeric argument '/Wextra'
+set(NN_CXX "$<COMPILE_LANGUAGE:CXX>")
+set(NN_CXX_RELEASE "$<AND:${NN_CXX},$<CONFIG:Release>>")
+set(NN_CXX_DEBUG "$<AND:${NN_CXX},$<CONFIG:Debug>>")
+
 if(CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
   target_compile_options(nn_flags INTERFACE
-    /W4 /permissive- /EHsc
-    $<$<CONFIG:Release>:/O2;/fp:precise>
-    $<$<CONFIG:Debug>:/Od;/Zi;/fsanitize=address>)
+    $<${NN_CXX}:/W4;/permissive-;/EHsc>
+    $<${NN_CXX_RELEASE}:/O2;/fp:precise>
+    $<${NN_CXX_DEBUG}:/Od;/Zi;/fsanitize=address>)
 else()
   target_compile_options(nn_flags INTERFACE
-    -Wall -Wextra -Wpedantic
-    $<$<CONFIG:Release>:-O3;-march=native;-fno-math-errno>
-    $<$<CONFIG:Debug>:-O0;-g>)
+    $<${NN_CXX}:-Wall;-Wextra;-Wpedantic>
+    $<${NN_CXX_RELEASE}:-O3;-march=native;-fno-math-errno>
+    $<${NN_CXX_DEBUG}:-O0;-g>)
 
   if(WIN32)
-    #target_compile_options(nn_flags INTERFACE $<$<CONFIG:Debug>:-fsanitize=address>)
+    #target_compile_options(nn_flags INTERFACE $<${NN_CXX_DEBUG}:-fsanitize=address>)
     #target_link_options(nn_flags INTERFACE $<$<CONFIG:Debug>:-fsanitize=address>)
   else()
     target_compile_options(nn_flags INTERFACE
-      $<$<CONFIG:Debug>:-fsanitize=address,undefined>)
+      $<${NN_CXX_DEBUG}:-fsanitize=address,undefined>)
     target_link_options(nn_flags INTERFACE
       $<$<CONFIG:Debug>:-fsanitize=address,undefined>)
   endif()
+endif()
+
+# CUDA device code gets its own flags. -lineinfo costs nothing at runtime and
+# lets Nsight Compute attribute stalls to source lines.
+target_compile_options(nn_flags INTERFACE
+  $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>
+  $<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<CONFIG:Release>>:-lineinfo>
+  $<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<CONFIG:Debug>>:-G>)
+
+if(NN_WITH_CUDA)
+  # nvcc uses MSVC as its host compiler, so CMake links CUDA targets through
+  # its vs_link_exe wrapper, which needs a manifest tool. CMAKE_MT is only
+  # auto-detected when the Windows SDK is on PATH -- i.e. from a Developer
+  # Command Prompt. Outside one it comes up empty and the link fails with
+  # "MT: command mt ... failed ... no such file or directory".
+  # Search into our own variable, not CMAKE_MT: CMake's Windows platform module
+  # may already have created CMAKE_MT as an empty cache entry, and find_program
+  # silently does nothing when its output variable is already in the cache.
+  if(WIN32 AND NOT CMAKE_MT)
+    get_filename_component(_nn_cxx_bin "${CMAKE_CXX_COMPILER}" DIRECTORY)
+    file(GLOB _nn_sdk_bin "C:/Program Files (x86)/Windows Kits/10/bin/*/x64")
+    find_program(NN_MANIFEST_TOOL NAMES llvm-mt mt
+      HINTS "${_nn_cxx_bin}" ${_nn_sdk_bin})
+    if(NOT NN_MANIFEST_TOOL)
+      message(FATAL_ERROR
+        "No manifest tool found. Pass -DCMAKE_MT=<path to llvm-mt.exe or mt.exe>, "
+        "or configure from a Visual Studio Developer Command Prompt.")
+    endif()
+    set(CMAKE_MT "${NN_MANIFEST_TOOL}" CACHE FILEPATH "Manifest tool" FORCE)
+    message(STATUS "Manifest tool: ${CMAKE_MT}")
+  endif()
+
+  enable_language(CUDA)
+  set(CMAKE_CUDA_STANDARD 20)
+  set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+  if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+    set(CMAKE_CUDA_ARCHITECTURES native)
+  endif()
+
+  # Our executables link with clang++, whose GNU-style driver treats a bare
+  # "cudart.lib" as a filename and fails. CMake adds the CUDA runtime in exactly
+  # that form to anything linking a target with .cu sources, so we turn that off
+  # (CUDA_RUNTIME_LIBRARY None, below) and link CUDA::cudart instead, which
+  # carries an absolute path clang++ accepts.
+  find_package(CUDAToolkit REQUIRED)
+  # Suppress CMake's own "cudadevrt.lib cudart.lib" for every target that links
+  # a CUDA-containing one; we add the runtime explicitly via CUDA::cudart.
+  set(CMAKE_CUDA_RUNTIME_LIBRARY None)
 endif()
 
 file(GLOB_RECURSE NN_SOURCES CONFIGURE_DEPENDS src/*.cpp)
 add_library(nn STATIC ${NN_SOURCES})
 target_include_directories(nn PUBLIC include)
 target_link_libraries(nn PUBLIC nn_flags)
+
+if(NN_WITH_CUDA)
+  file(GLOB_RECURSE NN_CUDA_SOURCES CONFIGURE_DEPENDS src/*.cu)
+  target_sources(nn PRIVATE ${NN_CUDA_SOURCES})
+  target_compile_definitions(nn PUBLIC NN_WITH_CUDA)
+  target_link_libraries(nn PUBLIC CUDA::cudart)
+  set_target_properties(nn PROPERTIES CUDA_SEPARABLE_COMPILATION OFF)
+endif()
 
 enable_testing()
 file(GLOB TEST_SOURCES CONFIGURE_DEPENDS tests/*.cpp)
