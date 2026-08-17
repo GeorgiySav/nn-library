@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <span>
 
 #include "rng.h"
 #include "dtype.h"
@@ -23,6 +24,9 @@ public:
   static Tensor from(std::initializer_list<float> values, Device d = Device::CPU, DType t = DType::F32);
   static Tensor from(std::initializer_list<std::initializer_list<float>> rows, Device d = Device::CPU, DType t = DType::F32);
   static Tensor from_i32(std::initializer_list<int32_t> values, Device d = Device::CPU, DType t = DType::I32);
+
+  static Tensor from(std::span<const float> values, Shape s, Device d = Device::CPU, DType t = DType::F32);
+  static Tensor from_i32(std::span<const int32_t> values, Shape s, Device d = Device::CPU, DType t = DType::I32);
 
   const Shape& shape() const { return shape_; }
   int64_t numel() const { return shape_.numel(); }

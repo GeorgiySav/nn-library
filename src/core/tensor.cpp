@@ -2,6 +2,7 @@
 
 #include <cassert>
 #include <stdexcept>
+#include <vector>
 
 #include <nn/core/allocator.h>
 
@@ -47,39 +48,43 @@ Tensor Tensor::scalar(float v, Device d, DType t) {
   return host_init({}, d, t, [&](Tensor& h) { h.host_data()[0] = v; });
 }
 
-Tensor Tensor::from(std::initializer_list<float> values, Device d, DType t) {
-  Tensor r(Shape({static_cast<int>(values.size())}), d, t);
-  float* out = r.host_data();
-  size_t i = 0;
-  for (float v : values) {
-    out[i++] = v;
-  }
+Tensor Tensor::from(std::span<const float> values, Shape s, Device d, DType t) {
+  assert(static_cast<int>(values.size()) == s.numel());
+  Tensor r(s, d, t);
+  copy_bytes(r.raw(), d, values.data(), Device::CPU,
+             values.size() * sizeof(float));
   return r;
+}
+
+Tensor Tensor::from_i32(std::span<const int32_t> values, Shape s, Device d, DType t) {
+  assert(static_cast<int>(values.size()) == s.numel());
+  Tensor r(s, d, t);
+  copy_bytes(r.raw(), d, values.data(), Device::CPU,
+             values.size() * sizeof(int32_t));
+  return r;
+}
+
+Tensor Tensor::from(std::initializer_list<float> values, Device d, DType t) {
+  return from(std::span<const float>(values.begin(), values.size()),
+              Shape({static_cast<int>(values.size())}), d, t);
 }
 
 Tensor Tensor::from(std::initializer_list<std::initializer_list<float>> rows, Device d, DType t) {
-  Tensor r(Shape({static_cast<int>(rows.size()),
-                   rows.size() ? static_cast<int>(rows.begin()->size()) : 0}),
-           d, t);
-  float* out = r.host_data();
-  size_t i = 0;
+  const int cols = rows.size() ? static_cast<int>(rows.begin()->size()) : 0;
+
+  std::vector<float> flat;
+  flat.reserve(rows.size() * size_t(cols));
   for (const auto& row : rows) {
     assert(row.size() == rows.begin()->size() && "ragged nested initializer list");
-    for (float v : row) {
-      out[i++] = v;
-    }
+    flat.insert(flat.end(), row.begin(), row.end());
   }
-  return r;
+
+  return from(flat, Shape({static_cast<int>(rows.size()), cols}), d, t);
 }
 
 Tensor Tensor::from_i32(std::initializer_list<int32_t> values, Device d, DType t) {
-  Tensor r(Shape({static_cast<int>(values.size())}), d, t);
-  int32_t* out = r.host_data_i32();
-  size_t i = 0;
-  for (int32_t v : values) {
-    out[i++] = v;
-  }
-  return r;
+  return from_i32(std::span<const int32_t>(values.begin(), values.size()),
+                  Shape({static_cast<int>(values.size())}), d, t);
 }
 
 float* Tensor::device_ptr() const {
