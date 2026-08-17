@@ -1,6 +1,7 @@
 #include <nn/core/allocator.h>
 
 #include <cstdlib>
+#include <cstring>
 #include <stdexcept>
 
 namespace nn {
@@ -20,6 +21,23 @@ struct CpuAllocator : public Allocator {
     }
   }
 };
+
+void copy_bytes(void* dst, Device dst_dev,
+                const void* src, Device src_dev, size_t bytes) {
+  if (bytes == 0) return;
+
+  if (dst_dev == Device::CPU && src_dev == Device::CPU) {
+    std::memcpy(dst, src, bytes);
+    return;
+  }
+
+  // CUDA: issue the copy on the source device's current stream, then
+  // synchronise on any transfer that lands in host memory -- the caller is
+  // about to dereference dst and would otherwise race the copy.
+  //   cudaMemcpyAsync(dst, src, bytes, kind, current_stream(gpu).handle);
+  //   if (dst_dev == Device::CPU) current_stream(gpu).synchronize();
+  throw std::runtime_error("copy_bytes: CUDA backend not built");
+}
 
 Allocator& allocator_for(Device d) {
   switch (d) {

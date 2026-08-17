@@ -10,7 +10,7 @@ NN_TEST(test_tensor_zeros) {
   NN_CHECK(t.device() == nn::Device::CPU);
   NN_CHECK(t.dtype() == nn::DType::F32);
   for (size_t i{0u}; i < t.numel(); ++i) {
-    NN_CHECK(t.data()[i] == 0.0f);
+    NN_CHECK(t.host_data()[i] == 0.0f);
   }
 }
 
@@ -22,7 +22,7 @@ NN_TEST(test_tensor_full) {
   NN_CHECK(t.device() == nn::Device::CPU);
   NN_CHECK(t.dtype() == nn::DType::F32);
   for (size_t i{0u}; i < t.numel(); ++i) {
-    NN_CHECK(t.data()[i] == 42.0f);
+    NN_CHECK(t.host_data()[i] == 42.0f);
   }
 }
 
@@ -41,21 +41,21 @@ NN_TEST(test_tensor_copy) {
   // shallow copy
   nn::Tensor t1 = nn::Tensor::full({2, 3}, 1.0f);
   nn::Tensor t2 = t1;
-  NN_CHECK(t1.data() == t2.data());
+  NN_CHECK(t1.host_data() == t2.host_data());
 
   // deep copy
   nn::Tensor t3 = t1.clone();
-  NN_CHECK(t1.data() != t3.data());
+  NN_CHECK(t1.host_data() != t3.host_data());
 }
 
 NN_TEST(test_tensor_cpu_write_read) {
   nn::Tensor t = nn::Tensor::zeros({2, 3});
-  float* data = t.data();
+  float* data = t.host_data();
   for (size_t i{0u}; i < t.numel(); ++i) {
     data[i] = static_cast<float>(i);
   }
   for (size_t i{0u}; i < t.numel(); ++i) {
-    NN_CHECK(t.data()[i] == static_cast<float>(i));
+    NN_CHECK(t.host_data()[i] == static_cast<float>(i));
   }
 }
 
@@ -65,12 +65,12 @@ NN_TEST(test_tensor_randn) {
   // get stddev
   float mean = 0.0f;
   for (size_t i{0u}; i < t.numel(); ++i) {
-    mean += t.data()[i];
+    mean += t.host_data()[i];
   }
   mean /= t.numel();
   float var = 0.0f;
   for (size_t i{0u}; i < t.numel(); ++i) {
-    float diff = t.data()[i] - mean;
+    float diff = t.host_data()[i] - mean;
     var += diff * diff;
   }
   var /= t.numel();
@@ -87,6 +87,6 @@ NN_TEST(test_tensor_requires_grad) {
   NN_CHECK(t.grad().shape() == t.shape());
   t.zero_grad();
   for (size_t i{0u}; i < t.grad().numel(); ++i) {
-    NN_CHECK(t.grad().data()[i] == 0.0f);
+    NN_CHECK(t.grad().host_data()[i] == 0.0f);
   }
 }

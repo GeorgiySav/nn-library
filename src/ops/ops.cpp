@@ -6,10 +6,18 @@
 
 namespace nn::ops {
 
-Tensor matmul(const Tensor& a, const Tensor& b, bool transA, bool transB) {
+namespace {
+void same_device(const Tensor& a, const Tensor& b, const char* op) {
   if (a.device() != b.device()) {
-    throw std::invalid_argument("Tensors must be on the same device");
+    throw std::invalid_argument(std::string(op) + ": operands on different devices");
   }
+} 
+}
+
+
+Tensor matmul(const Tensor& a, const Tensor& b, bool transA, bool transB) {
+  same_device(a, b, "matmul");
+  
   if (a.shape().rank() != 2 || b.shape().rank() != 2) {
     throw std::invalid_argument("Both tensors must be 2D");
   }
@@ -23,14 +31,13 @@ Tensor matmul(const Tensor& a, const Tensor& b, bool transA, bool transB) {
 
   Tensor out(Shape{M, N}, a.device(), a.dtype());
   const auto& k = nn::kernels::kernels(a.device());
-  k.gemm(a.data(), b.data(), out.data(), M, N, K_a, transA, transB);
+  k.gemm(current_stream(a.device()), a.device_ptr(), b.device_ptr(), out.device_ptr(), M, N, K_a, transA, transB);
   return out;
 }
 
 Tensor add_row_bias(const Tensor& x, const Tensor& bias) {
-  if (x.device() != bias.device()) {
-    throw std::invalid_argument("Tensors must be on the same device");
-  }
+  same_device(x, bias, "add_row_bias");
+
   if (x.shape().rank() != 2 || bias.shape().rank() != 1) {
     throw std::invalid_argument("x must be 2D and bias must be 1D");
   }
@@ -40,7 +47,7 @@ Tensor add_row_bias(const Tensor& x, const Tensor& bias) {
 
   Tensor out(x.shape(), x.device(), x.dtype());
   const auto& k = nn::kernels::kernels(x.device());
-  k.add_row_bias(x.data(), bias.data(), out.data(), x.shape().dim(0), x.shape().dim(1));
+  k.add_row_bias(current_stream(x.device()), x.device_ptr(), bias.device_ptr(), out.device_ptr(), x.shape().dim(0), x.shape().dim(1));
   return out;
 }
 
@@ -51,68 +58,80 @@ Tensor col_sum(const Tensor& x) {
 
   Tensor out(Shape{x.shape().dim(1)}, x.device(), x.dtype());
   const auto& k = nn::kernels::kernels(x.device());
-  k.col_sum(x.data(), out.data(), x.shape().dim(0), x.shape().dim(1));
+  k.col_sum(current_stream(x.device()), x.device_ptr(), out.device_ptr(), x.shape().dim(0), x.shape().dim(1));
   return out;
 }
 
 Tensor relu(const Tensor& x) {
   Tensor out(x.shape(), x.device(), x.dtype());
   const auto& k = nn::kernels::kernels(x.device());
-  k.relu(x.data(), out.data(), x.numel());
+  k.relu(current_stream(x.device()), x.device_ptr(), out.device_ptr(), x.numel());
   return out;
 }
 
 Tensor relu_backward(const Tensor& x, const Tensor& g_out) {
+  same_device(x, g_out, "relu_backward");
+  
   if (x.shape() != g_out.shape()) {
     throw std::invalid_argument("x and g_out must have the same shape");
   }
 
   Tensor g_x(x.shape(), x.device(), x.dtype());
   const auto& k = nn::kernels::kernels(x.device());
-  k.relu_backward(x.data(), g_out.data(), g_x.data(), x.numel());
+  k.relu_backward(current_stream(x.device()), x.device_ptr(), g_out.device_ptr(), g_x.device_ptr(), x.numel());
   return g_x;
 }
 
 Tensor add(const Tensor& a, const Tensor& b) {
+  same_device(a, b, "add");
+
   if (a.shape() != b.shape()) {
     throw std::invalid_argument("Tensors must have the same shape for addition");
   }
 
   Tensor out(a.shape(), a.device(), a.dtype());
   const auto& k = nn::kernels::kernels(a.device());
-  k.add(a.data(), b.data(), out.data(), a.numel());
+  k.add(current_stream(a.device()), a.device_ptr(), b.device_ptr(), out.device_ptr(), a.numel());
   return out;
 }
 
 void add_inplace(Tensor& a, const Tensor& b) {
+  same_device(a, b, "add_inplace");
+
   if (a.shape() != b.shape()) {
     throw std::invalid_argument("Tensors must have the same shape for addition");
   }
 
   const auto& k = nn::kernels::kernels(a.device());
-  k.add(a.data(), b.data(), a.data(), a.numel());
+  k.add(current_stream(a.device()), a.device_ptr(), b.device_ptr(), a.device_ptr(), a.numel());
 }
 
 void scale_inplace(Tensor& a, float alpha) {
   const auto& k = nn::kernels::kernels(a.device());
-  k.scale(alpha, a.data(), a.numel());
+  k.scale(current_stream(a.device()), alpha, a.device_ptr(), a.numel());
 }
 
 void axpy_inplace(Tensor& y, float alpha, const Tensor& x) {
+  same_device(y, x, "axpy_inplace");
+
   if (y.shape() != x.shape()) {
     throw std::invalid_argument("Tensors must have the same shape for axpy");
   }
 
   const auto& k = nn::kernels::kernels(y.device());
-  k.axpy(alpha, x.data(), y.data(), y.numel());
+  k.axpy(current_stream(y.device()), alpha, x.device_ptr(), y.device_ptr(), y.numel());
 }
 
 void fill_inplace(Tensor& a, float v) {
   const auto& k = nn::kernels::kernels(a.device());
-  k.fill(v, a.data(), a.numel());
+  k.fill(current_stream(a.device()), v, a.device_ptr(), a.numel());
 }
 
 void softmax_ce(const Tensor& logits, const Tensor& labels, Tensor& loss_out, Tensor& probs) {
+  same_device(logits, labels, "softmax_ce");
+  same_device(labels, loss_out, "softmax_ce");
+  same_device(probs, loss_out, "softmax_ce");
+
   if (logits.shape().rank() != 2 || labels.shape().rank() != 1) {
     throw std::invalid_argument("logits must be 2D and labels must be 1D");
   }
@@ -127,10 +146,13 @@ void softmax_ce(const Tensor& logits, const Tensor& labels, Tensor& loss_out, Te
   }
 
   const auto& k = nn::kernels::kernels(logits.device());
-  k.softmax_ce(logits.data(), labels.data_i32(), loss_out.data(), probs.data(), logits.shape().dim(0), logits.shape().dim(1));
+  k.softmax_ce(current_stream(logits.device()), logits.device_ptr(), labels.device_ptr_i32(), loss_out.device_ptr(), probs.device_ptr(), logits.shape().dim(0), logits.shape().dim(1));
 }
 
 Tensor softmax_ce_backward(const Tensor& probs, const Tensor& labels, const Tensor& g_loss) {
+  same_device(probs, labels, "softmax_ce_backward");
+  same_device(g_loss, labels, "softmax_ce_backward");
+
   if (probs.shape().rank() != 2 || labels.shape().rank() != 1) {
     throw std::invalid_argument("probs must be 2D and labels must be 1D");
   }
@@ -143,16 +165,16 @@ Tensor softmax_ce_backward(const Tensor& probs, const Tensor& labels, const Tens
 
   Tensor g_logits(probs.shape(), probs.device(), probs.dtype());
   const auto& k = nn::kernels::kernels(g_logits.device());
-  k.softmax_ce_backward(probs.data(), labels.data_i32(), g_loss.data(),
-                        g_logits.data(), probs.shape().dim(0), probs.shape().dim(1));
+  k.softmax_ce_backward(current_stream(probs.device()), probs.device_ptr(), labels.device_ptr_i32(), g_loss.device_ptr(),
+                        g_logits.device_ptr(), probs.shape().dim(0), probs.shape().dim(1));
   return g_logits;
 }
 
 Tensor argmax_rows(const Tensor& x) {
   if (x.shape().rank() != 2) throw std::invalid_argument("argmax rows: x must be 2D");
   Tensor out(Shape{x.shape().dim(0)}, x.device(), DType::I32);
-  const auto& k = kernels::kernels(x.device());
-  k.argmax_rows(x.data(), out.data_i32(), x.shape().dim(0), x.shape().dim(1));
+  const auto& k = nn::kernels::kernels(x.device());
+  k.argmax_rows(current_stream(x.device()), x.device_ptr(), out.device_ptr_i32(), x.shape().dim(0), x.shape().dim(1));
   return out;
 }
 

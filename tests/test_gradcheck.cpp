@@ -20,7 +20,7 @@ NN_TEST(gradcheck_two_layer_mlp) {
   
   nn::Tensor labels(nn::Shape{B}, nn::Device::CPU, nn::DType::I32);
   for (int i{0}; i < B; ++i)
-    labels.data_i32()[i] = i % C;
+    labels.host_data_i32()[i] = i % C;
 
   nn::autograd::Tape tape;
   nn::Tensor loss;

@@ -1,8 +1,10 @@
 #include "naive_kernels.h"
 
+#include <nn/core/device.h>
+
 namespace nn::kernels {
 
-void naive_col_sum(const float* X, float* out, int M, int N) {
+void naive_col_sum(const Stream& s, const float* X, float* out, int M, int N) {
   for (int n{0}; n < N; ++n) {
     float sum = 0.0f;
     for (int m{0}; m < M; ++m) {
@@ -12,7 +14,7 @@ void naive_col_sum(const float* X, float* out, int M, int N) {
   }
 }
 
-void naive_add_row_bias(const float* X, const float* b, float* Y, int M, int N) {
+void naive_add_row_bias(const Stream& s, const float* X, const float* b, float* Y, int M, int N) {
   for (int m{0}; m < M; ++m) {
     for (int n{0}; n < N; ++n) {
       Y[m*N + n] = X[m*N + n] + b[n];
@@ -20,7 +22,7 @@ void naive_add_row_bias(const float* X, const float* b, float* Y, int M, int N) 
   }
 }
 
-void naive_argmax_rows(const float* X, int32_t* out, int M, int N) {
+void naive_argmax_rows(const Stream& s, const float* X, int32_t* out, int M, int N) {
   for (int i = 0; i < M; ++i) {
     const float* row = X + int64_t(i) * N;
     int best = 0;

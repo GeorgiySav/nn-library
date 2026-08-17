@@ -21,18 +21,18 @@ float gradCheck(Tensor& param,
   float max_error = 0.0f;
   for (int i{0}; i < num_checks; ++i) {
     int idx = static_cast<int>(rng.next_uint32() % param.numel());
-    float original_value = param.data()[idx];
+    float original_value = param.host_data()[idx];
 
-    param.data()[idx] = original_value + h;
+    param.host_data()[idx] = original_value + h;
     float loss_plus_h = loss_fn();
 
-    param.data()[idx] = original_value - h;
+    param.host_data()[idx] = original_value - h;
     float loss_minus_h = loss_fn();
 
-    param.data()[idx] = original_value;
+    param.host_data()[idx] = original_value;
 
     float numerical_grad = (loss_plus_h - loss_minus_h) / (2.0f * h);
-    float analytical_grad = grad.data()[idx];
+    float analytical_grad = grad.host_data()[idx];
     float error = std::abs(numerical_grad - analytical_grad) /
                   std::max(std::abs(numerical_grad) + std::abs(analytical_grad), 1e-4f);
     max_error = std::max(max_error, error);

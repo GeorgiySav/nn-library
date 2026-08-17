@@ -32,7 +32,7 @@ public:
     const size_t d = size_t(features());
     const size_t k = size_t(target_width());
 
-    float* x = x_out.data();
+    float* x = x_out.host_data();
     Target* y = target_ptr(y_out);
 
     for (size_t i{0}; i < rows.size(); ++i) {
@@ -43,8 +43,8 @@ public:
 
 protected:
   static Target* target_ptr(Tensor& t) {
-    if constexpr (std::is_same_v<Target, float>) return t.data();
-    else                                         return t.data_i32();
+    if constexpr (std::is_same_v<Target, float>) return t.host_data();
+    else                                         return t.host_data_i32();
   }
 };
 
@@ -82,14 +82,14 @@ public:
 
     assert(x_out.size() == d && y_out.size() == k);
 
-    std::memcpy(x_out.data(), x_.data() + size_t(index) * d, d * sizeof(float));
+    std::memcpy(x_out.data(), x_.host_data() + size_t(index) * d, d * sizeof(float));
     std::memcpy(y_out.data(), src_targets() + size_t(index) * k, k * sizeof(Target));
   }
 
 private:
   const Target* src_targets() const {
-    if constexpr (std::is_same_v<Target, float>) return y_.data();
-    else                                         return y_.data_i32();
+    if constexpr (std::is_same_v<Target, float>) return y_.host_data();
+    else                                         return y_.host_data_i32();
   }
 
   Tensor x_, y_;

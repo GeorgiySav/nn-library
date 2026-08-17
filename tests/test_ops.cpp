@@ -16,10 +16,10 @@ NN_TEST(test_matmul) {
   nn::Tensor c = nn::ops::matmul(a, b);
 
   NN_CHECK(c.shape() == nn::Shape({2, 2}));
-  NN_CHECK_CLOSE(c.data()[0], 58.0f, 1e-6);
-  NN_CHECK_CLOSE(c.data()[1], 64.0f, 1e-6);
-  NN_CHECK_CLOSE(c.data()[2], 139.0f, 1e-6);
-  NN_CHECK_CLOSE(c.data()[3], 154.0f, 1e-6);
+  NN_CHECK_CLOSE(c.host_data()[0], 58.0f, 1e-6);
+  NN_CHECK_CLOSE(c.host_data()[1], 64.0f, 1e-6);
+  NN_CHECK_CLOSE(c.host_data()[2], 139.0f, 1e-6);
+  NN_CHECK_CLOSE(c.host_data()[3], 154.0f, 1e-6);
 
 
   nn::Tensor d = nn::Tensor::from({
@@ -30,10 +30,10 @@ NN_TEST(test_matmul) {
   nn::Tensor e = nn::ops::matmul(a, d, false, true);
 
   NN_CHECK(e.shape() == nn::Shape({2, 2}));
-  NN_CHECK_CLOSE(e.data()[0], 58.0f, 1e-6);
-  NN_CHECK_CLOSE(e.data()[1], 64.0f, 1e-6);
-  NN_CHECK_CLOSE(e.data()[2], 139.0f, 1e-6);
-  NN_CHECK_CLOSE(e.data()[3], 154.0f, 1e-6);
+  NN_CHECK_CLOSE(e.host_data()[0], 58.0f, 1e-6);
+  NN_CHECK_CLOSE(e.host_data()[1], 64.0f, 1e-6);
+  NN_CHECK_CLOSE(e.host_data()[2], 139.0f, 1e-6);
+  NN_CHECK_CLOSE(e.host_data()[3], 154.0f, 1e-6);
 }
 
 NN_TEST(test_softmax_ce) {
@@ -43,7 +43,7 @@ NN_TEST(test_softmax_ce) {
   nn::Tensor logits = nn::Tensor::randn(nn::Shape({M, N}), rng, 1.0f);
   nn::Tensor labels = nn::Tensor::zeros(nn::Shape({M}), nn::Device::CPU, nn::DType::I32);
   for (int i{0}; i < M; ++i) {
-    labels.data_i32()[i] = static_cast<int32_t>(rng.next_uint32() % N);
+    labels.host_data_i32()[i] = static_cast<int32_t>(rng.next_uint32() % N);
   }
 
   nn::Tensor loss = nn::Tensor::zeros(nn::Shape({}), nn::Device::CPU, nn::DType::F32);

@@ -6,8 +6,8 @@ static std::shared_ptr<nn::data::TensorDataset<>> counting_dataset(int n, int d)
   nn::Tensor x = nn::Tensor::zeros({n, d});
   nn::Tensor y(nn::Shape{n}, nn::Device::CPU, nn::DType::I32);
   for (int i{0}; i < n; ++i) {
-    x.data()[size_t(i) * d] = float(i);
-    y.data_i32()[i] = i % 10;
+    x.host_data()[size_t(i) * d] = float(i);
+    y.host_data_i32()[i] = i % 10;
   }
   return std::make_shared<nn::data::TensorDataset<>>(std::move(x), std::move(y));
 }
@@ -22,9 +22,9 @@ NN_TEST(dataloader_visits_every_row_once_and_keeps_labels_aligned) {
   while (loader.has_next()) {
     auto [xb, yb] = loader.next();
     for (int i{0}; i < xb.shape().dim(0); ++i) {
-      const int row = int(xb.data()[size_t(i) * 4]);
+      const int row = int(xb.host_data()[size_t(i) * 4]);
       ++seen[size_t(row)];
-      NN_CHECK(yb.data_i32()[i] == row % 10);
+      NN_CHECK(yb.host_data_i32()[i] == row % 10);
     }
     ++batches;
   }
@@ -39,7 +39,7 @@ NN_TEST(dataloader_shuffle_actually_permutes) {
 
   bool identity = true;
   for (int i = 0; i < 64; ++i) {
-    if (xb.data()[i] != float(i)) { identity = false; break; }
+    if (xb.host_data()[i] != float(i)) { identity = false; break; }
   }
   NN_CHECK(!identity);
 }

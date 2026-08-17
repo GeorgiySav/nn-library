@@ -30,11 +30,20 @@ public:
   DType dtype() const { return dtype_; }
   bool defined() const { return storage_ != nullptr; }
 
-  float* data() const;
-  int32_t* data_i32();
-  const int32_t* data_i32() const;
+  // Address in the owning device's address space. NOT dereferenceable on the
+  // host unless device() == Device::CPU. For passing to kernels only.
+  float* device_ptr() const;
+  int32_t* device_ptr_i32() const;
+
+  // Dereferenceable host pointer. Requires device() == Device::CPU. For a
+  // device tensor, call .to(Device::CPU) and keep the result alive.
+  float* host_data() const;
+  int32_t* host_data_i32() const;
+
+  // Untyped device-space address. Only copy_bytes should consume this.
   void* raw();
   const void* raw() const;
+
   float item() const;
 
   Tensor to(Device d) const;

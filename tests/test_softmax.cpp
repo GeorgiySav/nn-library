@@ -18,7 +18,7 @@ NN_TEST(test_uniform_logits) {
   std::vector<float> probs(M*N, -1.0f);
 
   float loss = 0.0f;
-  softmax_ce()(logits.data(), labels.data(), &loss, probs.data(), M, N);
+  softmax_ce()(cpu_stream(), logits.data(), labels.data(), &loss, probs.data(), M, N);
 
   for (int j{0}; j < N; ++j) {
     NN_CHECK_CLOSE(probs[j], 0.25f, 1e-6);
@@ -33,7 +33,7 @@ NN_TEST(test_row_sum_to_one) {
   std::vector<int32_t> labels(8, 0);
   std::vector<float> probs(8*10, -1.0f);
   float loss = 0.0f;
-  softmax_ce()(logits.data(), labels.data(), &loss, probs.data(), 8, 10);
+  softmax_ce()(cpu_stream(), logits.data(), labels.data(), &loss, probs.data(), 8, 10);
   for (int i{0}; i < 8; ++i) {
     float row_sum = 0.0f;
     for (int j{0}; j < 10; ++j) {
@@ -48,7 +48,7 @@ NN_TEST(test_numerical_stability) {
   std::vector<int32_t> labels{1};
   std::vector<float> probs(3, -1.0f);
   float loss = 0.0f;
-  softmax_ce()(logits.data(), labels.data(), &loss, probs.data(), 1, 3);
+  softmax_ce()(cpu_stream(), logits.data(), labels.data(), &loss, probs.data(), 1, 3);
   for (int j{0}; j < 3; ++j) {
     NN_CHECK_CLOSE(probs[j], 1.0f/3.0f, 1e-6);
   }
@@ -58,7 +58,7 @@ NN_TEST(test_numerical_stability) {
   std::vector<int32_t> labels2{2};
   std::vector<float> probs2(3, -1.0f);
   float loss2 = 0.0f;
-  softmax_ce()(logits2.data(), labels2.data(), &loss2, probs2.data(), 1, 3);
+  softmax_ce()(cpu_stream(), logits2.data(), labels2.data(), &loss2, probs2.data(), 1, 3);
   for (int j{0}; j < 3; ++j) {
     NN_CHECK_CLOSE(probs2[j], 1.0f/3.0f, 1e-6);
   }
@@ -70,7 +70,7 @@ NN_TEST(test_confident_correct_prediction) {
   std::vector<int32_t> labels{1};
   std::vector<float> probs(3, -1.0f);
   float loss = 0.0f;
-  softmax_ce()(logits.data(), labels.data(), &loss, probs.data(), 1, 3);
+  softmax_ce()(cpu_stream(), logits.data(), labels.data(), &loss, probs.data(), 1, 3);
   NN_CHECK_CLOSE(probs[1], 1.0f, 1e-6);
   NN_CHECK_CLOSE(loss, 0.0f, 1e-6);
 }
@@ -80,7 +80,7 @@ NN_TEST(test_confident_incorrect_prediction) {
   std::vector<int32_t> labels{0};
   std::vector<float> probs(3, -1.0f);
   float loss = 0.0f;
-  softmax_ce()(logits.data(), labels.data(), &loss, probs.data(), 1, 3);
+  softmax_ce()(cpu_stream(), logits.data(), labels.data(), &loss, probs.data(), 1, 3);
   NN_CHECK_CLOSE(probs[1], 1.0f, 1e-6);
   NN_CHECK_CLOSE(loss, 100.0f, 1e-6);
 }
@@ -95,7 +95,7 @@ NN_TEST(test_mean_not_sum) {
   std::vector<int32_t> labels{0, 0, 0, 0};
   std::vector<float> probs(3*4, -1.0f);
   float loss = 0.0f;
-  softmax_ce()(logits.data(), labels.data(), &loss, probs.data(), 4, 3);
+  softmax_ce()(cpu_stream(), logits.data(), labels.data(), &loss, probs.data(), 4, 3);
   NN_CHECK_CLOSE(probs[1], 1.0f, 1e-6);
   NN_CHECK_CLOSE(loss, 100.0f, 1e-6);
 }
@@ -115,13 +115,13 @@ NN_TEST(test_backward_against_finite_difference) {
   }
   std::vector<float> probs(M*N, -1.0f);
   float loss = 0.0f;
-  softmax_ce()(logits.data(), labels.data(), &loss, probs.data(), M, N);
+  softmax_ce()(cpu_stream(), logits.data(), labels.data(), &loss, probs.data(), M, N);
 
   std::vector<float> g_logits(M*N, -1.0f);
   const auto& k = nn::kernels::kernels(nn::Device::CPU);
   NN_CHECK(k.softmax_ce_backward != nullptr);
   float g_loss = 1.0f;
-  k.softmax_ce_backward(probs.data(), labels.data(), &g_loss, g_logits.data(), M, N);
+  k.softmax_ce_backward(cpu_stream(), probs.data(), labels.data(), &g_loss, g_logits.data(), M, N);
 
   const float h = 1e-3f;
   for (int i{0}; i < M*N; ++i) {
@@ -132,11 +132,11 @@ NN_TEST(test_backward_against_finite_difference) {
 
     std::vector<float> probs_plus_h(M*N, -1.0f);
     float loss_plus_h = 0.0f;
-    softmax_ce()(logits_plus_h.data(), labels.data(), &loss_plus_h, probs_plus_h.data(), M, N);
+    softmax_ce()(cpu_stream(), logits_plus_h.data(), labels.data(), &loss_plus_h, probs_plus_h.data(), M, N);
 
     std::vector<float> probs_minus_h(M*N, -1.0f);
     float loss_minus_h = 0.0f;
-    softmax_ce()(logits_minus_h.data(), labels.data(), &loss_minus_h, probs_minus_h.data(), M, N);
+    softmax_ce()(cpu_stream(), logits_minus_h.data(), labels.data(), &loss_minus_h, probs_minus_h.data(), M, N);
 
     const float finite_diff = (loss_plus_h - loss_minus_h) / (2.0f * h);
     NN_CHECK_CLOSE(finite_diff, g_logits[i], 2e-2f);
@@ -154,13 +154,13 @@ NN_TEST(test_gradient_rows_sum_to_zero) {
   }
   std::vector<float> probs(M*N, -1.0f);
   float loss = 0.0f;
-  softmax_ce()(logits.data(), labels.data(), &loss, probs.data(), M, N);
+  softmax_ce()(cpu_stream(), logits.data(), labels.data(), &loss, probs.data(), M, N);
 
   std::vector<float> g_logits(M*N, -1.0f);
   const auto& k = nn::kernels::kernels(nn::Device::CPU);
   NN_CHECK(k.softmax_ce_backward != nullptr);
   float g_loss = 1.0f;
-  k.softmax_ce_backward(probs.data(), labels.data(), &g_loss, g_logits.data(), M, N);
+  k.softmax_ce_backward(cpu_stream(), probs.data(), labels.data(), &g_loss, g_logits.data(), M, N);
 
   for (int i{0}; i < M; ++i) {
     float row_sum = 0.0f;

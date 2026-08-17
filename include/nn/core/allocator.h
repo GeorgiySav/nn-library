@@ -10,7 +10,10 @@ struct Allocator {
   virtual void free(void* ptr) = 0;
 };
 
-// throws for CUDA in a CPU build
 Allocator& allocator_for(Device d);
+
+// copies raw bytes between two devices
+void copy_bytes(void* dst, Device dst_dev,
+                const void* src, Device src_dev, size_t bytes);
 
 }

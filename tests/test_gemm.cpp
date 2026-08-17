@@ -38,7 +38,7 @@ NN_TEST(test_gemm) {
   const std::vector<float> B = {7.0f, 8.0f, 9.0f, 10.0f, 11.0f, 12.0f};
   std::vector<float> C(4, -1.0f);
 
-  gemm()(A.data(), B.data(), C.data(), 2, 2, 3, false, false);
+  gemm()(cpu_stream(), A.data(), B.data(), C.data(), 2, 2, 3, false, false);
 
   NN_CHECK_CLOSE(C[0], 58.0f, 1e-6);
   NN_CHECK_CLOSE(C[1], 64.0f, 1e-6);
@@ -51,7 +51,7 @@ NN_TEST(test_gemm_transA) {
   const std::vector<float> B = {7.0f, 8.0f, 9.0f, 10.0f, 11.0f, 12.0f};
   std::vector<float> C(4, -1.0f);
 
-  gemm()(A.data(), B.data(), C.data(), 2, 2, 3, true, false);
+  gemm()(cpu_stream(), A.data(), B.data(), C.data(), 2, 2, 3, true, false);
 
   NN_CHECK_CLOSE(C[0], 58.0f, 1e-6);
   NN_CHECK_CLOSE(C[1], 64.0f, 1e-6);
@@ -64,7 +64,7 @@ NN_TEST(test_gemm_transB) {
   const std::vector<float> B = {7.0f, 9.0f, 11.0f, 8.0f, 10.0f, 12.0f};
   std::vector<float> C(4, -1.0f);
 
-  gemm()(A.data(), B.data(), C.data(), 2, 2, 3, false, true);
+  gemm()(cpu_stream(), A.data(), B.data(), C.data(), 2, 2, 3, false, true);
 
   NN_CHECK_CLOSE(C[0], 58.0f, 1e-6);
   NN_CHECK_CLOSE(C[1], 64.0f, 1e-6);
@@ -84,10 +84,10 @@ NN_TEST(test_gemm_trans_consistency) {
   const std::vector<float> Bt = transpose(B, K, N);
 
   std::vector<float> base(M*N), c2(M*N), c3(M*N), c4(M*N);
-  gemm()(A.data(), B.data(), base.data(), M, N, K, false, false);
-  gemm()(At.data(), B.data(), c2.data(), M, N, K, true, false);
-  gemm()(A.data(), Bt.data(), c3.data(), M, N, K, false, true);
-  gemm()(At.data(), Bt.data(), c4.data(), M, N, K, true, true);
+  gemm()(cpu_stream(), A.data(), B.data(), base.data(), M, N, K, false, false);
+  gemm()(cpu_stream(), At.data(), B.data(), c2.data(), M, N, K, true, false);
+  gemm()(cpu_stream(), A.data(), Bt.data(), c3.data(), M, N, K, false, true);
+  gemm()(cpu_stream(), At.data(), Bt.data(), c4.data(), M, N, K, true, true);
 
   for (int i{0}; i < M*N; ++i) {
     NN_CHECK_CLOSE(base[i], c2[i], 1e-6);
@@ -101,7 +101,7 @@ NN_TEST(test_gemm_outer_product) {
   const std::vector<float> B{7, 11, 13, 17};
   std::vector<float> C(12, -1.0f);
 
-  gemm()(A.data(), B.data(), C.data(), 3, 4, 1, false, false);
+  gemm()(cpu_stream(), A.data(), B.data(), C.data(), 3, 4, 1, false, false);
 
   for (int i{0}; i < 3; ++i) {
     for (int j{0}; j < 4; ++j) {
@@ -118,7 +118,7 @@ NN_TEST(test_gemm_single_row) {
   fill_random(A, rng);
   fill_random(B, rng);
 
-  gemm()(A.data(), B.data(), C.data(), M, N, K, false, false);
+  gemm()(cpu_stream(), A.data(), B.data(), C.data(), M, N, K, false, false);
   ref_gemm(A.data(), B.data(), expected.data(), M, N, K);
 
   for (int i{0}; i < M*N; ++i) {
@@ -136,7 +136,7 @@ NN_TEST(test_gemm_identity) {
     I[i*n + i] = 1.0f;
   }
 
-  gemm()(A.data(), I.data(), C.data(), n, n, n, false, false);
+  gemm()(cpu_stream(), A.data(), I.data(), C.data(), n, n, n, false, false);
 
   for (int i{0}; i < n*n; ++i) {
     NN_CHECK_CLOSE(A[i], C[i], 1e-6);
@@ -153,12 +153,12 @@ NN_TEST(test_gemm_associativity) {
   fill_random(C, rng);
 
   std::vector<float> AB(M*P), AB_C(M*N);
-  gemm()(A.data(), B.data(), AB.data(), M, P, K, false, false);
-  gemm()(AB.data(), C.data(), AB_C.data(), M, N, P, false, false);
+  gemm()(cpu_stream(), A.data(), B.data(), AB.data(), M, P, K, false, false);
+  gemm()(cpu_stream(), AB.data(), C.data(), AB_C.data(), M, N, P, false, false);
 
   std::vector<float> BC(K*N), A_BC(M*N);
-  gemm()(B.data(), C.data(), BC.data(), K, N, P, false, false);
-  gemm()(A.data(), BC.data(), A_BC.data(), M, N, K, false, false);
+  gemm()(cpu_stream(), B.data(), C.data(), BC.data(), K, N, P, false, false);
+  gemm()(cpu_stream(), A.data(), BC.data(), A_BC.data(), M, N, K, false, false);
 
   for (int i{0}; i < M*N; ++i) {
     NN_CHECK_CLOSE(AB_C[i], A_BC[i], 1e-6);

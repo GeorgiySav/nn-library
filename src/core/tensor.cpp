@@ -3,6 +3,8 @@
 #include <cassert>
 #include <stdexcept>
 
+#include <nn/core/allocator.h>
+
 namespace nn {
 
 Tensor::Tensor(Shape s, Device d, DType t) : shape_(s), dtype_(t) {
@@ -18,7 +20,7 @@ Tensor Tensor::zeros(Shape s, Device d, DType t) {
 
 Tensor Tensor::full(Shape s, float value, Device d, DType t) {
   Tensor f(s, d, t);
-  float* data = f.data();
+  float* data = f.host_data();
   for (size_t i{0u}; i < f.numel(); ++i) {
     data[i] = value;
   }
@@ -27,7 +29,7 @@ Tensor Tensor::full(Shape s, float value, Device d, DType t) {
 
 Tensor Tensor::randn(Shape s, Pcg32& rng, float stddev, Device d, DType t) {
   Tensor r(s, d, t);
-  float* data = r.data();
+  float* data = r.host_data();
   for (size_t i{0u}; i < r.numel(); ++i) {
     data[i] = rng.next_normal() * stddev;
   }
@@ -36,14 +38,14 @@ Tensor Tensor::randn(Shape s, Pcg32& rng, float stddev, Device d, DType t) {
 
 Tensor Tensor::scalar(float v, Device d, DType t) {
   Tensor s({}, d, t);
-  float* data = s.data();
+  float* data = s.host_data();
   data[0] = v;
   return s;
 }
 
 Tensor Tensor::from(std::initializer_list<float> values, Device d, DType t) {
   Tensor r(Shape({static_cast<int>(values.size())}), d, t);
-  float* out = r.data();
+  float* out = r.host_data();
   size_t i = 0;
   for (float v : values) {
     out[i++] = v;
@@ -55,7 +57,7 @@ Tensor Tensor::from(std::initializer_list<std::initializer_list<float>> rows, De
   Tensor r(Shape({static_cast<int>(rows.size()),
                    rows.size() ? static_cast<int>(rows.begin()->size()) : 0}),
            d, t);
-  float* out = r.data();
+  float* out = r.host_data();
   size_t i = 0;
   for (const auto& row : rows) {
     assert(row.size() == rows.begin()->size() && "ragged nested initializer list");
@@ -68,7 +70,7 @@ Tensor Tensor::from(std::initializer_list<std::initializer_list<float>> rows, De
 
 Tensor Tensor::from_i32(std::initializer_list<int32_t> values, Device d, DType t) {
   Tensor r(Shape({static_cast<int>(values.size())}), d, t);
-  int32_t* out = r.data_i32();
+  int32_t* out = r.host_data_i32();
   size_t i = 0;
   for (int32_t v : values) {
     out[i++] = v;
@@ -76,16 +78,26 @@ Tensor Tensor::from_i32(std::initializer_list<int32_t> values, Device d, DType t
   return r;
 }
 
-float* Tensor::data() const {
+float* Tensor::device_ptr() const {
+  assert(dtype_ == DType::F32);
   return static_cast<float*>(storage_->data());
 }
 
-int32_t* Tensor::data_i32() {
+int32_t* Tensor::device_ptr_i32() const {
+  assert(dtype_ == DType::I32);
   return static_cast<int32_t*>(storage_->data());
 }
 
-const int32_t* Tensor::data_i32() const {
-  return static_cast<const int32_t*>(storage_->data());
+float* Tensor::host_data() const {
+  assert(device() == Device::CPU &&
+         "host_data() on a device tensor; use .to(Device::CPU)");
+  return device_ptr();
+}
+
+int32_t* Tensor::host_data_i32() const {
+  assert(device() == Device::CPU &&
+         "host_data_i32() on a device tensor; use .to(Device::CPU)");
+  return device_ptr_i32();
 }
 
 void* Tensor::raw() {
@@ -98,16 +110,19 @@ const void* Tensor::raw() const {
 
 float Tensor::item() const {
   assert(numel() == 1);
-  return data()[0];
+  if (device() != Device::CPU) return to(Device::CPU).item();
+  return host_data()[0];
 }
 
 Tensor Tensor::to(Device d) const {
-  if (device() == d) {
-    return *this;
-  }
-  if (d == Device::CUDA) {
-    throw std::runtime_error("CUDA device not supported yet");
-  }
+  if (!storage_) return Tensor{};
+  if (device() == d) return *this;
+
+  Tensor out(shape_, d, dtype_);
+  copy_bytes(out.raw(), d, raw(), device(),
+             size_t(numel()) * dtype_size(dtype_));
+  
+  return out;
 }
 
 Tensor Tensor::clone() const {

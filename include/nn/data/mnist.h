@@ -44,7 +44,7 @@ inline Tensor load_mnist_images(const std::string& path) {
   if (!in) throw std::runtime_error("mnist: truncated image data");
 
   Tensor x(Shape{int(n), int(d)});
-  float* out = x.data();
+  float* out = x.host_data();
   for (size_t i{0}; i < raw.size(); ++i) out[i] = float(raw[i]) * (1.0f / 255.0f);
   return x;
 }
@@ -61,7 +61,7 @@ inline Tensor load_mnist_labels(const std::string& path) {
   if (!in) throw std::runtime_error("mnist: truncated label data");
 
   Tensor y(Shape{int(n)}, Device::CPU, DType::I32);
-  int32_t* out = y.data_i32();
+  int32_t* out = y.host_data_i32();
   for (uint32_t i = 0; i < n; ++i) out[i] = int32_t(raw[i]);
   return y;
 }

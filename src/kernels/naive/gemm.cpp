@@ -2,6 +2,8 @@
 
 #include <cstring>
 
+#include <nn/core/device.h>
+
 namespace nn::kernels {
 
 namespace {
@@ -58,7 +60,7 @@ void gemm_tt(const float* A, const float* B, float* C, int M, int N, int K) {
 
 }  // namespace
 
-void naive_gemm(const float* A, const float* B, float* C,
+void naive_gemm(const Stream& s, const float* A, const float* B, float* C,
                 int M, int N, int K, bool transA, bool transB) {
   if (!transA && !transB) return gemm_nn(A, B, C, M, N, K);
   if (!transA &&  transB) return gemm_nt(A, B, C, M, N, K);
