@@ -23,11 +23,9 @@ struct Stream {
   void synchronize() const;
 };
 
-#ifdef NN_WITH_CUDA
 // Number of usable CUDA devices. Returns 0 rather than throwing when there is
 // no driver, so it is safe to call during static initialisation.
 int cuda_device_count();
-#endif
 
 const Stream& default_stream(Device d);
 // stream ops will submit to right now, on this thread

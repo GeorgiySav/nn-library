@@ -12,9 +12,7 @@ namespace nn::test {
 inline const std::vector<Device>& devices() {
   static const std::vector<Device> d = [] {
     std::vector<Device> v{Device::CPU};
-    #ifdef NN_WITH_CUDA
     if (cuda_device_count() > 0) v.push_back(Device::CUDA);
-    #endif
     return v;
   }();
   return d;
