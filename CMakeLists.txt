@@ -78,12 +78,19 @@ if(WIN32 AND NOT CMAKE_MT)
   message(STATUS "Manifest tool: ${CMAKE_MT}")
 endif()
 
-enable_language(CUDA)
-set(CMAKE_CUDA_STANDARD 20)
-set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+# Must be set BEFORE enable_language(CUDA): that call seeds
+# CMAKE_CUDA_ARCHITECTURES in the cache from nvcc's built-in default (75 for
+# CUDA 13.x), so a "NOT DEFINED" guard placed after it never fires and every
+# build silently targets the default arch. Compiling for the wrong arch is not
+# a build error -- the PTX just gets JIT'd at launch, and on a newer GPU the
+# driver rejects it with "the provided PTX was compiled with an unsupported
+# toolchain", surfacing as a runtime throw from the first kernel launch.
 if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
   set(CMAKE_CUDA_ARCHITECTURES native)
 endif()
+enable_language(CUDA)
+set(CMAKE_CUDA_STANDARD 20)
+set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
 # Our executables link with clang++, whose GNU-style driver treats a bare
 # "cudart.lib" as a filename and fails. CMake adds the CUDA runtime in exactly

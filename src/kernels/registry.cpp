@@ -5,6 +5,7 @@
 #include <stdexcept>
 
 #include "naive/naive_kernels.h"
+#include "cuda/cuda_kernels.h"
 
 namespace nn::kernels {
 namespace {
@@ -68,9 +69,32 @@ void register_naive_kernels() {
   g_backend[index_of(Device::CPU)] = "naive";
 }
 
+void register_cuda_kernels() {
+  KernelTable& t = table(Device::CUDA); 
+  t.gemm = nullptr;
+  // reduce
+  t.add_row_bias = nullptr;
+  t.col_sum = nullptr;
+  t.argmax_rows = nullptr;
+  // elementwise
+  t.relu = &cuda_relu;
+  t.relu_backward = &cuda_relu_backward;
+  t.add = &cuda_add;
+  t.scale = &cuda_scale;
+  t.axpy = &cuda_axpy;
+  t.fill = &cuda_fill;
+  // softmax cross-entropy
+  t.softmax_ce = nullptr;
+  t.softmax_ce_backward = nullptr;
+
+  g_backend[index_of(Device::CUDA)] = "CUDA";
+
+}
+
 void init_kernels() {
   static const bool once = [] {
     register_naive_kernels();
+    register_cuda_kernels();
 
     const char* sel = std::getenv("NN_KERNELS");
     if (sel && std::strcmp(sel, "naive") == 0) return true;
