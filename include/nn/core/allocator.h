@@ -16,4 +16,6 @@ Allocator& allocator_for(Device d);
 void copy_bytes(void* dst, Device dst_dev,
                 const void* src, Device src_dev, size_t bytes);
 
+void memset_bytes(void* dst, Device dst_dev, int value, size_t bytes);
+
 }

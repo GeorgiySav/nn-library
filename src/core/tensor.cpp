@@ -7,6 +7,17 @@
 
 namespace nn {
 
+namespace {
+
+template <class Init>
+Tensor host_init(Shape s, Device d, DType t, Init&& init) {
+  Tensor h(s, Device::CPU, t);
+  init(h);
+  return h.to(d);
+}
+
+}
+
 Tensor::Tensor(Shape s, Device d, DType t) : shape_(s), dtype_(t) {
   size_t bytes = shape_.numel() * dtype_size(dtype_);
   storage_ = std::make_shared<Storage>(bytes, d);
@@ -14,33 +25,26 @@ Tensor::Tensor(Shape s, Device d, DType t) : shape_(s), dtype_(t) {
 
 Tensor Tensor::zeros(Shape s, Device d, DType t) {
   Tensor z(s, d, t);
-  std::memset(z.raw(), 0, z.numel() * dtype_size(t));
+  memset_bytes(z.raw(), d, 0, z.numel() * dtype_size(t));
   return z;
 }
 
 Tensor Tensor::full(Shape s, float value, Device d, DType t) {
-  Tensor f(s, d, t);
-  float* data = f.host_data();
-  for (size_t i{0u}; i < f.numel(); ++i) {
-    data[i] = value;
-  }
-  return f;
+  return host_init(s, d, t, [value](Tensor& h) {
+    float* data = h.host_data();
+    for (size_t i{0u}; i < h.numel(); ++i) data[i] = value;
+  });
 }
 
 Tensor Tensor::randn(Shape s, Pcg32& rng, float stddev, Device d, DType t) {
-  Tensor r(s, d, t);
-  float* data = r.host_data();
-  for (size_t i{0u}; i < r.numel(); ++i) {
-    data[i] = rng.next_normal() * stddev;
-  }
-  return r;
+  return host_init(s, d, t, [&](Tensor& h) {
+    float* data = h.host_data();
+    for (size_t i{0u}; i < h.numel(); ++i) data[i] = rng.next_normal() * stddev;
+  });
 }
 
 Tensor Tensor::scalar(float v, Device d, DType t) {
-  Tensor s({}, d, t);
-  float* data = s.host_data();
-  data[0] = v;
-  return s;
+  return host_init({}, d, t, [&](Tensor& h) { h.host_data()[0] = v; });
 }
 
 Tensor Tensor::from(std::initializer_list<float> values, Device d, DType t) {
@@ -127,7 +131,8 @@ Tensor Tensor::to(Device d) const {
 
 Tensor Tensor::clone() const {
   Tensor t(shape_, device(), dtype_);
-  std::memcpy(t.raw(), raw(), numel() * dtype_size(dtype_));
+  copy_bytes(t.raw(), device(), raw(), device(),
+             size_t(numel()) * dtype_size(dtype_));
   return t;
 }
 
@@ -159,7 +164,8 @@ Tensor& Tensor::grad() {
 
 void Tensor::zero_grad() {
   if (meta_ && meta_->grad.defined())
-    std::memset(meta_->grad.raw(), 0, meta_->grad.numel() * dtype_size(dtype_));
+    memset_bytes(meta_->grad.raw(), meta_->grad.device(), 0,
+                 meta_->grad.numel() * dtype_size(dtype_));
 }
 
 }

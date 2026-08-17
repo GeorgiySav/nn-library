@@ -39,6 +39,19 @@ void copy_bytes(void* dst, Device dst_dev,
   throw std::runtime_error("copy_bytes: CUDA backend not built");
 }
 
+void memset_bytes(void* dst, Device dst_dev, int value, size_t bytes) {
+  if (bytes == 0) return;
+
+  if (dst_dev == Device::CPU) {
+    std::memset(dst, value, bytes);
+    return;
+  }
+
+  // CUDA: issue the memset on the device's current stream
+  //   cudaMemsetAsync(dst, value, bytes, current_stream(gpu).handle);
+  throw std::runtime_error("memset_bytes: CUDA backend not built");
+}
+
 Allocator& allocator_for(Device d) {
   switch (d) {
     case Device::CPU:
