@@ -73,7 +73,7 @@ void register_cuda_kernels() {
   KernelTable& t = table(Device::CUDA); 
   t.gemm = nullptr;
   // reduce
-  t.add_row_bias = nullptr;
+  t.add_row_bias = &cuda_add_row_bias;
   t.col_sum = nullptr;
   t.argmax_rows = nullptr;
   // elementwise

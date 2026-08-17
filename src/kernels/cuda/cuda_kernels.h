@@ -11,4 +11,6 @@ namespace nn::kernels {
   void cuda_add(const Stream& s, const float* A, const float* B, float* C, int64_t n);
   void cuda_relu(const Stream& s, const float* X, float* Y, int64_t n);
   void cuda_relu_backward(const Stream& s, const float* X, const float* gY, float* gX, int64_t n);
+
+  void cuda_add_row_bias(const Stream& s, const float* X, const float* b, float* Y, int M, int N);
 }
