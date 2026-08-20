@@ -72,6 +72,24 @@ __global__ void relu_backward_kernel(const float* X, const float* gY, float* gX,
   }
 }
 
+__global__ void adam_step_kernel(float* __restrict__ p, const float* __restrict__ g,
+                                 float* __restrict__ m, float* __restrict__ v,
+                                 float lr, float b1, float b2, float eps,
+                                 float bc1, float bc2, int64_t n) {
+  for (int64_t i = blockIdx.x * blockDim.x + threadIdx.x;
+       i < n;
+       i += int64_t(gridDim.x) * blockDim.x) {
+    const float gi = g[i];
+    const float mi = b1 * m[i] + (1.0f - b1) * gi;
+    const float vi = b2 * v[i] + (1.0f - b2) * gi * gi;
+
+    m[i] = mi;
+    v[i] = vi;
+
+    p[i] -= lr * (mi / bc1) / (sqrtf(vi / bc2) + eps);
+  }
+}
+
 void cuda_fill(const Stream& s, float v, float* X, int64_t n) {
   launch_elementwise(s, n, fill_kernel, v, X);
 }
@@ -89,6 +107,10 @@ void cuda_relu(const Stream& s, const float* X, float* Y, int64_t n) {
 }
 void cuda_relu_backward(const Stream& s , const float* X, const float* gY, float* gX, int64_t n) {
   launch_elementwise(s, n, relu_backward_kernel, X, gY, gX);
+}
+void cuda_adam_step(const Stream& s, float* p, const float* g, float* m, float* v,
+                    float lr, float b1, float b2, float eps, float bc1, float bc2, int64_t n) {
+  launch_elementwise(s, n, adam_step_kernel, p, g, m, v, lr, b1, b2, eps, bc1, bc2);
 }
 
 }

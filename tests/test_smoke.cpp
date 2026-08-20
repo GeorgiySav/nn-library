@@ -2,9 +2,14 @@
 
 #include <nn/version.h>
 #include <string>
+#include <typeinfo>
 
 int main(int argc, char** argv) {
-  return nn::test::run_all(argc, argv);
+  try { return nn::test::run_all(argc, argv); }
+  catch (const std::exception& e) {
+    std::printf("\n!! Uncaught %s: %s\n", typeid(e).name(), e.what());
+    return 2;
+  }
 }
 
 NN_TEST(smoke) {

@@ -65,17 +65,19 @@ void register_naive_kernels() {
   // softmax cross-entropy
   t.softmax_ce = &naive_softmax_ce;
   t.softmax_ce_backward = &naive_softmax_ce_backward;
+  // optimisers
+  t.adam_step = &naive_adam_step;
 
   g_backend[index_of(Device::CPU)] = "naive";
 }
 
 void register_cuda_kernels() {
   KernelTable& t = table(Device::CUDA); 
-  t.gemm = nullptr;
+  t.gemm = &cuda_gemm;
   // reduce
   t.add_row_bias = &cuda_add_row_bias;
-  t.col_sum = nullptr;
-  t.argmax_rows = nullptr;
+  t.col_sum = &cuda_col_sum;
+  t.argmax_rows = &cuda_argmax_rows;
   // elementwise
   t.relu = &cuda_relu;
   t.relu_backward = &cuda_relu_backward;
@@ -84,8 +86,10 @@ void register_cuda_kernels() {
   t.axpy = &cuda_axpy;
   t.fill = &cuda_fill;
   // softmax cross-entropy
-  t.softmax_ce = nullptr;
-  t.softmax_ce_backward = nullptr;
+  t.softmax_ce = &cuda_softmax_ce;
+  t.softmax_ce_backward = &cuda_softmax_ce_backward;
+  // optimisers
+  t.adam_step = &cuda_adam_step;
 
   g_backend[index_of(Device::CUDA)] = "CUDA";
 

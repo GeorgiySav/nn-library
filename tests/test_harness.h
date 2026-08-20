@@ -23,6 +23,7 @@ inline void report(const char* file, int line, const std::string& msg) {
 }
 
 inline int run_all(int argc, char** argv) {
+  std::setvbuf(stdout, nullptr, _IONBF, 0);
   const char* filter = (argc > 1) ? argv[1] : nullptr;
   int ran = 0, failed_tests = 0;
 

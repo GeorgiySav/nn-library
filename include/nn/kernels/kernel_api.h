@@ -21,7 +21,7 @@ using SoftmaxCeFn         = void(*)(const Stream& s, const float* logits, const 
 using SoftmaxCeBackwardFn = void(*)(const Stream& s, const float* probs, const int32_t* labels,
                                     const float* g_loss, float* g_logits, int M, int N);
 using AdamStepFn          = void(*)(const Stream& s, float* p, const float* g, float* m, float* v,
-                                    float lr, float b1, float b2, float eps, float bc1, int64_t n);
+                                    float lr, float b1, float b2, float eps, float bc1, float bc2, int64_t n);
 using ArgmaxRowsFn        = void(*)(const Stream& s, const float* X, int32_t* out, int M, int N);
 
 struct KernelTable {

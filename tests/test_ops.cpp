@@ -49,7 +49,7 @@ NN_TEST(test_matmul_rejects_device_mismatch) {
 
   nn::Tensor a = nn::Tensor::from({{1, 2}, {3, 4}}, nn::test::devices()[0]);
   nn::Tensor b = nn::Tensor::from({{1, 2}, {3, 4}}, nn::test::devices()[1]);
-  NN_CHECK_THROWS(nn::ops::matmul(a, b), std::runtime_error);
+  NN_CHECK_THROWS(nn::ops::matmul(a, b), std::invalid_argument);
 }
 
 NN_TEST(test_softmax_ce) {

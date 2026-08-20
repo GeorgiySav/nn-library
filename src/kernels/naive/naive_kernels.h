@@ -18,4 +18,7 @@ void naive_fill(const Stream& s, float v, float* X, int64_t n);
 void naive_softmax_ce(const Stream& s, const float* logits, const int32_t* labels, float* loss_out, float* probs, int M, int N);
 void naive_softmax_ce_backward(const Stream& s, const float* probs, const int32_t* labels, const float* g_loss, float* g_logits, int M, int N);
 void naive_argmax_rows(const Stream& s, const float* X, int32_t* out, int M, int N);
+
+void naive_adam_step(const Stream& s, float* p, const float* g, float* m, float* v,
+                      float lr, float b1, float b2, float eps, float bc1, float bc2, int64_t n);
 }
