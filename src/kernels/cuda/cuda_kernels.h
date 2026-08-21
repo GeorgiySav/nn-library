@@ -7,6 +7,8 @@
 namespace nn::kernels {
 void cuda_gemm(const Stream& s, const float* A, const float* B, float* C,
                int M, int N, int K, bool transA, bool transB);
+void cublas_gemm(const Stream& s, const float* A, const float* B, float* C,
+               int M, int N, int K, bool transA, bool transB);
 
 void cuda_fill(const Stream& s, float v, float* X, int64_t n);
 void cuda_scale(const Stream& s, float alpha, float* X, int64_t n);

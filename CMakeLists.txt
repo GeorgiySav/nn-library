@@ -106,7 +106,7 @@ target_include_directories(nn PUBLIC include)
 # PRIVATE: consumers must never see these, and cuda_common.h in particular
 # would drag <cuda_runtime.h> onto the public surface.
 target_include_directories(nn PRIVATE src)
-target_link_libraries(nn PUBLIC nn_flags CUDA::cudart)
+target_link_libraries(nn PUBLIC nn_flags CUDA::cudart CUDA::cublas)
 set_target_properties(nn PROPERTIES CUDA_SEPARABLE_COMPILATION OFF)
 
 enable_testing()

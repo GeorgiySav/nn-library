@@ -92,7 +92,14 @@ void register_cuda_kernels() {
   t.adam_step = &cuda_adam_step;
 
   g_backend[index_of(Device::CUDA)] = "CUDA";
+}
 
+void register_cublas_kernels() {
+  KernelTable& t = table(Device::CUDA);
+
+  t.gemm = &cublas_gemm;
+
+  g_backend[index_of(Device::CUDA)] = "cuBLAS";
 }
 
 void init_kernels() {
@@ -101,7 +108,8 @@ void init_kernels() {
     register_cuda_kernels();
 
     const char* sel = std::getenv("NN_KERNELS");
-    if (sel && std::strcmp(sel, "naive") == 0) return true;
+    if (!(sel && std::strcmp(sel, "handwritten") == 0))
+      register_cublas_kernels();
 
     return true;
   }();
