@@ -21,6 +21,14 @@ public:
   }
 
   void zero_grad() { for (Tensor* p : parameters()) p->zero_grad(); }
+
+  void to(Device d) {
+    for (Tensor* p : parameters()) {
+      const bool rg = p->requires_grad();
+      *p = p->to(d);
+      p->set_requires_grad(rg);
+    }
+  }
 };
 
 class Linear : public Module {

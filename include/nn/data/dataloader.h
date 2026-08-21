@@ -16,10 +16,14 @@ struct Batch {
 template <class Target = int32_t>
 class DataLoader {
 public:
-  DataLoader(std::shared_ptr<const Dataset<Target>> ds, int batch_size,
-             Pcg32& rng, bool shuffle = true, bool drop_last = true)
+  DataLoader(std::shared_ptr<const Dataset<Target>> ds,
+             int batch_size,
+             Pcg32& rng,
+             bool shuffle = true,
+             bool drop_last = true,
+             Device device = Device::CPU)
              : ds_(std::move(ds)), rng_(rng), batch_(batch_size),
-               shuffle_(shuffle), drop_last_(drop_last) {
+               shuffle_(shuffle), drop_last_(drop_last), device_(device) {
     if (!ds_) throw std::invalid_argument("DataLoader: null dataset");
     if (batch_size <= 0 || batch_size > ds_->size()) {
       throw std::invalid_argument("DataLoader: bad batch sizes");
@@ -61,6 +65,10 @@ public:
     ds_->gather(std::span<const int>(order_.data() + cursor_, size_t(n)), b.x, b.y);
 
     cursor_ += n;
+
+    b.x = b.x.to(device_);
+    b.y = b.y.to(device_);
+
     return b;
   }
   
@@ -82,6 +90,7 @@ private:
   Pcg32& rng_;
   int batch_;
   bool shuffle_, drop_last_;
+  Device device_;
   int cursor_ = 0;
   std::vector<int> order_;
   Tensor xb_, yb_;

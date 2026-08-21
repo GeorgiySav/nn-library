@@ -23,3 +23,7 @@ cmake --build build-rel --target bench_gemm bench_tape
 .\build-rel\bench_gemm.exe
 .\build-rel\bench_tape.exe
 ```
+
+## TODOs
+
+- Pinned memory

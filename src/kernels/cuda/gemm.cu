@@ -41,7 +41,7 @@ template<bool transA, bool transB>
 __global__ void gemm_kernel(const float* __restrict__ A, const float* __restrict__ B,
                             float* __restrict__ C, int M, int N, int K) {
   __shared__ float As[BK][BM + kPad];
-  __shared__ float As[BK][BN + kPad];
+  __shared__ float Bs[BK][BN + kPad];
 
   const int tx = threadIdx.x, ty = threadIdx.y;
   const int t  = ty * 16 + tx;
@@ -50,7 +50,7 @@ __global__ void gemm_kernel(const float* __restrict__ A, const float* __restrict
 
   float acc[TM][TN] = {};
 
-  float (int k0 = 0; k0 < K; k0 += BK) {
+  for (int k0 = 0; k0 < K; k0 += BK) {
     #pragma unroll
     for (int s = 0; s < (BM * BK) / 256; ++s) {
       int ai, ak;
@@ -146,9 +146,9 @@ void cuda_gemm(const Stream& s, const float* A, const float* B, float* C,
   if (M == 0 || N == 0) return;
 
   auto stream = static_cast<cudaStream_t>(s.handle);
-  const dim3 block(32, 8); // 256 threads
-  const dim3 grid((N + block.x - 1) / block.x,
-                  (M + block.y - 1) / block.y);
+  const dim3 block(16, 16); // 256 threads
+  const dim3 grid((N + BN - 1) / BN,
+                  (M + BM - 1) / BM);
   
   if      (!transA && !transB) gemm_kernel<false, false><<<grid, block, 0, stream>>>(A, B, C, M, N, K);
   else if ( transA && !transB) gemm_kernel< true, false><<<grid, block, 0, stream>>>(A, B, C, M, N, K);
@@ -162,7 +162,6 @@ void cublas_gemm(const Stream& s, const float* A, const float* B, float* C,
                int M, int N, int K, bool transA, bool transB) {
   if (M == 0 || N == 0) return;
 
-  auto stream = static_cast<cudaStream_t>(s.handle); 
   cublasHandle_t h = handle();
   NN_CUBLAS_CHECK(cublasSetStream(h, static_cast<cudaStream_t>(s.handle)));
 

@@ -21,7 +21,9 @@ float accuracy(nn::Module& model, nn::data::DataLoader<>& loader) {
   loader.reset();
   while (loader.has_next()) {
     auto [xb, yb] = loader.next();
-    correct += nn::metrics::count_correct(model.forward(xb), yb);
+    correct += nn::metrics::count_correct(
+                model.forward(xb).to(nn::Device::CPU),
+                yb.to(nn::Device::CPU));
     total   += yb.shape().dim(0);
   }
   return float(correct) / float(total);
@@ -29,6 +31,7 @@ float accuracy(nn::Module& model, nn::data::DataLoader<>& loader) {
 
 int main(int argc, char** argv) {
   std::printf("MNIST EXAMPLE\n");
+  nn::Device device = nn::Device::CUDA;
 
   const std::string dir = (argc > 1) ? argv[1] : NN_PROJECT_ROOT "/data/mnist";
 
@@ -40,8 +43,8 @@ int main(int argc, char** argv) {
   auto test  = nn::data::load_mnist(dir + "/t10k-images.idx3-ubyte",
                                     dir + "/t10k-labels.idx1-ubyte");
 
-  nn::data::DataLoader<> loader(train, 64, rng);
-  nn::data::DataLoader<> eval(test, 512, rng, false, false);
+  nn::data::DataLoader<> loader(train, 64, rng, true, true, device);
+  nn::data::DataLoader<> eval(test, 512, rng, false, false, device);
 
   std::printf("Creating model\n");
   nn::Sequential model(
@@ -49,6 +52,7 @@ int main(int argc, char** argv) {
     nn::ReLu(),
     nn::Linear(128, 10, rng) 
   );
+  model.to(device);
 
   nn::optim::SGD opt(model.parameters(), 0.1f);
   nn::autograd::Tape tape;
