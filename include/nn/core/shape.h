@@ -25,8 +25,8 @@ public:
     return dims_[i];
   }
 
-  int numel() const {
-    int n = 1;
+  int64_t numel() const {
+    int64_t n = 1;
     for (int i = 0; i < rank_; ++i) {
       n *= dims_[i];
     }
