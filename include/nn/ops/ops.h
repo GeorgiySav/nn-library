@@ -20,4 +20,7 @@ void   softmax_ce(const Tensor& logits, const Tensor& labels, Tensor& loss_out, 
 Tensor softmax_ce_backward(const Tensor& probs, const Tensor& labels, const Tensor& g_loss);
 
 Tensor argmax_rows(const Tensor& x);
+
+void adam(const Tensor& p, const Tensor& g, Tensor& m, Tensor& v,
+          float lr, float beta1, float beta2, float eps, int step);
 }

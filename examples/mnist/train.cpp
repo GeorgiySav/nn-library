@@ -8,7 +8,7 @@
 #include <nn/core/rng.h>
 
 #include <nn/nn/module.h>
-#include <nn/optim/sgd.h>
+#include <nn/optim/optim.h>
 #include <nn/autograd/tape.h>
 #include <nn/metrics.h>
 
@@ -54,7 +54,7 @@ int main(int argc, char** argv) {
   );
   model.to(device);
 
-  nn::optim::SGD opt(model.parameters(), 0.1f);
+  nn::optim::Adam opt(model.parameters(), 0.001f);
   nn::autograd::Tape tape;
 
   std::printf("Training\n");

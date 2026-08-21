@@ -178,4 +178,22 @@ Tensor argmax_rows(const Tensor& x) {
   return out;
 }
 
+void adam(const Tensor& p, const Tensor& g, Tensor& m, Tensor& v,
+          float lr, float beta1, float beta2, float eps, int step) {
+  same_device(p, g, "adam");
+  same_device(p, m, "adam");
+  same_device(p, v, "adam");
+
+  if (p.shape() != g.shape() || p.shape() != m.shape() || p.shape() != v.shape()) {
+    throw std::invalid_argument("All tensors must have the same shape for adam");
+  }
+
+  const float bc1 = 1.0f - std::pow(beta1, step);
+  const float bc2 = 1.0f - std::pow(beta2, step);
+  
+  const auto& k = nn::kernels::kernels(p.device());
+  k.adam_step(current_stream(p.device()), p.device_ptr(), g.device_ptr(), m.device_ptr(), v.device_ptr(),
+              lr, beta1, beta2, eps, bc1, bc2, p.numel());
+}
+
 }
