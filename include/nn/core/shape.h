@@ -2,6 +2,7 @@
 
 #include <initializer_list>
 #include <cassert>
+#include <span>
 #include <string>
 
 namespace nn {
@@ -16,6 +17,13 @@ public:
     int i = 0;
     for (const auto& d : dims) {
       dims_[i++] = d;
+    }
+  }
+  Shape(std::span<const int> dims) {
+    assert(dims.size() <= kMaxShapeRank);
+    rank_ = dims.size();
+    for (int i = 0; i < rank_; ++i) {
+      dims_[i] = dims[i];
     }
   }
 

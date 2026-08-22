@@ -58,6 +58,15 @@ __global__ void fill_kernel(float v, float* X, int64_t n) {
   }
 }
 
+__global__ void fill_from_kernel(const float* __restrict__ src, float* X, int64_t n) {
+  const float v = *src;
+  for (int64_t i = blockIdx.x * blockDim.x + threadIdx.x;
+       i < n;
+       i += int64_t(gridDim.x) * blockDim.x) {
+    X[i] = v;
+  }
+}
+
 __global__ void scale_kernel(float alpha, float* X, int64_t n) {
   for (int64_t i = blockIdx.x * blockDim.x + threadIdx.x;
        i < n;
@@ -118,6 +127,9 @@ __global__ void adam_step_kernel(float* __restrict__ p, const float* __restrict_
 
 void cuda_fill(const Stream& s, float v, float* X, int64_t n) {
   launch_elementwise(s, n, fill_kernel, v, X);
+}
+void cuda_fill_from(const Stream& s, const float* src, float* X, int64_t n) {
+  launch_elementwise(s, n, fill_from_kernel, src, X);
 }
 void cuda_scale(const Stream& s, float alpha, float* X, int64_t n) {
   launch_elementwise(s, n, scale_kernel, alpha, X);

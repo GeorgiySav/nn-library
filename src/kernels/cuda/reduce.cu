@@ -1,6 +1,9 @@
 #include "cuda_kernels.h"
 
+#include <nn/kernels/kernel_api.h>   // kSumAllWorkspace
+
 #include "../../cuda_common.h"
+#include "../strided_index.h"
 #include "cuda_reduce.cuh"
 
 namespace nn::kernels {
@@ -81,6 +84,71 @@ void cuda_argmax_rows(const Stream& s, const float* X, int32_t* out, int M, int 
   int grid = std::min(M, kMaxGrid);
 
   argmax_rows_kernel<<<grid, block, 0, stream>>>(X, out, M, N, sx);
+  NN_CUDA_CHECK_LAUNCH(stream);
+}
+
+namespace {
+
+constexpr int kSumBlock = 256;
+
+__global__ void sum_partials_kernel(const float* __restrict__ X,
+                                    float* partials, int64_t n) {
+  float acc = 0.0f;
+  for (int64_t i = blockIdx.x * int64_t(blockDim.x) + threadIdx.x;
+       i < n;
+       i += int64_t(gridDim.x) * blockDim.x) {
+    acc += X[i];
+  }
+  acc = block_reduce(acc, Plus(), 0.0f);
+  if (threadIdx.x == 0) partials[blockIdx.x] = acc;
+}
+
+__global__ void sum_partials_strided_kernel(const float* __restrict__ X, TensorView v,
+                                            float* partials, int64_t n) {
+  float acc = 0.0f;
+  for (int64_t i = blockIdx.x * int64_t(blockDim.x) + threadIdx.x;
+       i < n;
+       i += int64_t(gridDim.x) * blockDim.x) {
+    acc += X[offset_of(v, i)];
+  }
+  acc = block_reduce(acc, Plus(), 0.0f);
+  if (threadIdx.x == 0) partials[blockIdx.x] = acc;
+}
+
+__global__ void sum_finish_kernel(const float* __restrict__ partials,
+                                  float* out, int m) {
+  float acc = 0.0f;
+  for (int i = threadIdx.x; i < m; i += blockDim.x) acc += partials[i];
+  acc = block_reduce(acc, Plus(), 0.0f);
+  if (threadIdx.x == 0) *out = acc;
+}
+
+}  // namespace
+
+void cuda_sum_all(const Stream& s, const float* X, float* out,
+                  float* workspace, int64_t n) {
+  auto stream = static_cast<cudaStream_t>(s.handle);
+  if (n == 0) {
+    NN_CUDA_CHECK(cudaMemsetAsync(out, 0, sizeof(float), stream));
+    return;
+  }
+
+  sum_partials_kernel<<<kSumAllWorkspace, kSumBlock, 0, stream>>>(X, workspace, n);
+  sum_finish_kernel<<<1, 1024, 0, stream>>>(workspace, out, kSumAllWorkspace);
+  NN_CUDA_CHECK_LAUNCH(stream);
+}
+
+void cuda_sum_all_strided(const Stream& s, const float* X, TensorView v,
+                          float* out, float* workspace, int64_t n) {
+  auto stream = static_cast<cudaStream_t>(s.handle);
+  if (n == 0) {
+    NN_CUDA_CHECK(cudaMemsetAsync(out, 0, sizeof(float), stream));
+    return;
+  }
+
+  sum_partials_strided_kernel<<<kSumAllWorkspace, kSumBlock, 0, stream>>>(
+      X, v, workspace, n);
+  sum_finish_kernel<<<1, 1024, 0, stream>>>(workspace, out, kSumAllWorkspace);
   NN_CUDA_CHECK_LAUNCH(stream);
 }
 

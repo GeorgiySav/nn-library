@@ -80,4 +80,84 @@ Tensor cross_entropy(const Tensor& logits, const Tensor& labels) {
   return loss;
 }
 
+Tensor permute(const Tensor& x, std::span<const int> order) {
+  Tensor out = x.permute(order);
+
+  if (Tape* tape = active_tape(); tape && x.requires_grad()) {
+    // inverse[order[i]] = i
+    SmallVec<int, 8> inv(order.size());
+    for (int i{0}; i < int(order.size()); ++i) inv[order[i]] = i;
+
+    const int id = tape->record(
+      [inv](const Tensor& g_out, std::span<Tensor> g_in) mutable {
+        g_in[0] = g_out.permute(inv.span());
+      },
+      {tape->node_for(x)},
+      "permute"
+    );
+    tape->set_producer(out, id); 
+  }
+
+  return out;
+}
+
+Tensor reshape(const Tensor& x, std::span<const int> shape) {
+  Tensor out = x.reshape(shape);
+
+  if (Tape* tape = active_tape(); tape && x.requires_grad()) {
+    const int id = tape->record(
+      [x](const Tensor& g_out, std::span<Tensor> g_in) {
+        g_in[0] = g_out.reshape(x.shape());
+      },
+      {tape->node_for(x)},
+      "reshape"
+    );
+    tape->set_producer(out, id); 
+  }
+
+  return out;
+}
+
+Tensor slice(const Tensor& x, int axis, int64_t start, int64_t len) {
+  Tensor out = x.slice(axis, start, len);
+  
+  if (Tape* tape = active_tape(); tape && x.requires_grad()) {
+    const int id = tape->record(
+      [x, axis, start, len](const Tensor& g_out, std::span<Tensor> g_in) {
+        // Zero everywhere the slice did not reach, g_out inside the window.
+        // The window is a view sharing storage with g, so copy_into writes
+        // through its strides into g.
+        Tensor g = Tensor::zeros(x.shape(), x.device(), x.dtype());
+        Tensor window = g.slice(axis, start, len);
+        ops::copy_into(window, g_out);
+        g_in[0] = std::move(g);
+      },
+      {tape->node_for(x)},
+      "slice"
+    );
+    tape->set_producer(out, id); 
+  }
+
+  return out;
+}
+
+Tensor sum_all(const Tensor& x) {
+  Tensor out = ops::sum_all(x);
+
+  if (Tape* tape = active_tape(); tape && x.requires_grad()) {
+    const int id = tape->record(
+      [x](const Tensor& g_out, std::span<Tensor> g_in) {
+        Tensor g(x.shape(), x.device(), x.dtype());
+        ops::fill_from(g, g_out);
+        g_in[0] = std::move(g);
+      },
+      {tape->node_for(x)},
+      "sum_all"
+    );
+    tape->set_producer(out, id); 
+  }
+
+  return out;
+}
+
 }

@@ -52,6 +52,8 @@ void register_naive_kernels() {
   t.add_row_bias = &naive_add_row_bias;
   t.col_sum = &naive_col_sum;
   t.argmax_rows = &naive_argmax_rows;
+  t.sum_all = &naive_sum_all;
+  t.sum_all_strided = &naive_sum_all_strided;
   // elementwise
   t.relu = &naive_relu;
   t.relu_backward = &naive_relu_backward;
@@ -59,6 +61,7 @@ void register_naive_kernels() {
   t.scale = &naive_scale;
   t.axpy = &naive_axpy;
   t.fill = &naive_fill;
+  t.fill_from = &naive_fill_from;
   // elementwise, strided reads
   t.relu_strided = &naive_relu_strided;
   t.relu_backward_strided = &naive_relu_backward_strided;
@@ -71,6 +74,7 @@ void register_naive_kernels() {
   // copy
   t.copy_strided = &naive_copy_strided;
   t.copy_strided_i32 = &naive_copy_strided_i32;
+  t.copy_into_strided = &naive_copy_into_strided;
 
   g_backend[index_of(Device::CPU)] = "naive";
 }
@@ -82,6 +86,8 @@ void register_cuda_kernels() {
   t.add_row_bias = &cuda_add_row_bias;
   t.col_sum = &cuda_col_sum;
   t.argmax_rows = &cuda_argmax_rows;
+  t.sum_all = &cuda_sum_all;
+  t.sum_all_strided = &cuda_sum_all_strided;
   // elementwise
   t.relu = &cuda_relu;
   t.relu_backward = &cuda_relu_backward;
@@ -89,6 +95,7 @@ void register_cuda_kernels() {
   t.scale = &cuda_scale;
   t.axpy = &cuda_axpy;
   t.fill = &cuda_fill;
+  t.fill_from = &cuda_fill_from;
   // elementwise, strided reads
   t.relu_strided = &cuda_relu_strided;
   t.relu_backward_strided = &cuda_relu_backward_strided;
@@ -101,6 +108,7 @@ void register_cuda_kernels() {
   // copy
   t.copy_strided = &cuda_copy_strided;
   t.copy_strided_i32 = &cuda_copy_strided_i32;
+  t.copy_into_strided = &cuda_copy_into_strided;
 
   g_backend[index_of(Device::CUDA)] = "CUDA";
 }

@@ -4,7 +4,10 @@
 #include <stdexcept>
 #include <vector>
 
+#include <nn/core/rng.h>
 #include <nn/core/tensor.h>
+#include <nn/autograd/functions.h>
+#include <nn/autograd/tape.h>
 #include <nn/ops/ops.h>
 
 namespace {
@@ -288,5 +291,101 @@ NN_TEST(non_unit_innermost_stride_is_rejected) {
     NN_CHECK_THROWS(nn::ops::scale_inplace(dst, 2.0f), std::invalid_argument);
     NN_CHECK_THROWS(nn::ops::fill_inplace(dst, 1.0f), std::invalid_argument);
     NN_CHECK_THROWS(nn::ops::add_inplace(dst, dst), std::invalid_argument);
+  }
+}
+
+NN_TEST(sum_all_does_not_stagnate_at_2_to_the_24) {
+  const int64_t n = (int64_t(1) << 24) + 1;
+
+  NN_TEST_FOR_EACH_DEVICE(dev) {
+    const nn::Tensor x = nn::Tensor::full({int(n)}, 1.0f, dev);
+    NN_CHECK_CLOSE(nn::ops::sum_all(x).item(), 16777217.0f, 1e-7f);
+  }
+}
+
+NN_TEST(sum_all_is_deterministic) {
+  NN_TEST_FOR_EACH_DEVICE(dev) {
+    nn::Pcg32 rng(1234);
+    const nn::Tensor x = nn::Tensor::randn({1000, 1000}, rng, 1.0f, dev);
+
+    const float first = nn::ops::sum_all(x).item();
+    for (int i = 0; i < 20; ++i) {
+      NN_CHECK(nn::ops::sum_all(x).item() == first);
+    }
+  }
+}
+
+NN_TEST(sum_all_absorbs_strides) {
+  NN_TEST_FOR_EACH_DEVICE(dev) {
+    std::vector<float> host(7 * 8);
+    for (size_t i = 0; i < host.size(); ++i) host[i] = float(i) - 20.0f;
+    const nn::Tensor wide = nn::Tensor::from(host, nn::Shape({7, 8}), dev);
+
+    // A slice drops columns, so a kernel that ignored strides would read a
+    // different set of elements and still return a plausible number.
+    const nn::Tensor v = wide.slice(1, 0, 5);
+    NN_CHECK(!v.is_contiguous());
+
+    float expect = 0.0f;
+    for (int r = 0; r < 7; ++r)
+      for (int c = 0; c < 5; ++c) expect += host[size_t(r) * 8 + c];
+
+    NN_CHECK_CLOSE(nn::ops::sum_all(v).item(), expect, 1e-6f);
+    NN_CHECK_CLOSE(nn::ops::sum_all(v).item(),
+                   nn::ops::sum_all(v.contiguous()).item(), 1e-6f);
+
+    // and a 3D permute, so the decode has to get more than one axis right
+    const nn::Tensor cube = nn::Tensor::from(host, nn::Shape({2, 4, 7}), dev);
+    const int order[3] = {2, 0, 1};
+    const nn::Tensor p = cube.permute(std::span<const int>(order, 3));
+    NN_CHECK_CLOSE(nn::ops::sum_all(p).item(), nn::ops::sum_all(cube).item(), 1e-6f);
+  }
+}
+
+NN_TEST(sum_all_edge_shapes) {
+  NN_TEST_FOR_EACH_DEVICE(dev) {
+    NN_CHECK_CLOSE(nn::ops::sum_all(nn::Tensor::full({1}, 3.5f, dev)).item(), 3.5f, 1e-7f);
+    NN_CHECK_CLOSE(nn::ops::sum_all(nn::Tensor::zeros({64, 64}, dev)).item(), 0.0f, 1e-7f);
+    // fewer elements than the fixed 1024-block grid: most blocks contribute 0
+    NN_CHECK_CLOSE(nn::ops::sum_all(nn::Tensor::full({10}, 2.0f, dev)).item(), 20.0f, 1e-7f);
+  }
+}
+
+NN_TEST(fill_from_broadcasts_a_device_scalar) {
+  NN_TEST_FOR_EACH_DEVICE(dev) {
+    const nn::Tensor x = nn::Tensor::full({5, 5}, 2.0f, dev);
+    const nn::Tensor total = nn::ops::sum_all(x);          // 50.0, never on the host
+
+    nn::Tensor dst = nn::Tensor::zeros({3, 4}, dev);
+    nn::ops::fill_from(dst, total);
+
+    const nn::Tensor h = dst.to(nn::Device::CPU);
+    for (int64_t i = 0; i < dst.numel(); ++i) {
+      NN_CHECK_CLOSE(h.host_data()[i], 50.0f, 1e-6f);
+    }
+
+    NN_CHECK_THROWS(nn::ops::fill_from(dst, x), std::invalid_argument);   // not a scalar
+    nn::Tensor view = nn::Tensor::zeros({4, 4}, dev).slice(1, 0, 2);
+    NN_CHECK_THROWS(nn::ops::fill_from(view, total), std::invalid_argument);
+  }
+}
+
+NN_TEST(sum_all_backward_fills_and_accumulates) {
+  NN_TEST_FOR_EACH_DEVICE(dev) {
+    nn::Tensor x = nn::Tensor::full({2, 3}, 4.0f, dev);
+    x.set_requires_grad(true);
+
+    for (int pass = 1; pass <= 2; ++pass) {
+      nn::autograd::Tape tape;
+      nn::autograd::TapeScope scope(tape);
+      nn::Tensor s = nn::autograd::sum_all(x);
+      NN_CHECK_CLOSE(s.item(), 24.0f, 1e-6f);
+      tape.backward(s);
+
+      const nn::Tensor g = x.grad().to(nn::Device::CPU);
+      for (int64_t i = 0; i < g.numel(); ++i) {
+        NN_CHECK_CLOSE(g.host_data()[i], float(pass), 1e-6f);
+      }
+    }
   }
 }

@@ -17,6 +17,8 @@ void   add_inplace(Tensor& a, const Tensor& b);
 void   scale_inplace(Tensor& a, float alpha);
 void   axpy_inplace(Tensor& y, float alpha, const Tensor& x);
 void   fill_inplace(Tensor& a, float v);
+// Broadcast a scalar that already lives on the device.
+void   fill_from(Tensor& a, const Tensor& value);
 void   softmax_ce(const Tensor& logits, const Tensor& labels, Tensor& loss_out, Tensor& probs);
 
 Tensor softmax_ce_backward(const Tensor& probs, const Tensor& labels, const Tensor& g_loss);
@@ -27,4 +29,7 @@ void adam(const Tensor& p, const Tensor& g, Tensor& m, Tensor& v,
           float lr, float beta1, float beta2, float eps, int step);
 
 void copy_strided(const Tensor& dst, const Tensor& src);
+void copy_into(Tensor& dst, const Tensor& src);
+
+Tensor sum_all(const Tensor& x);
 }

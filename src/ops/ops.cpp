@@ -210,6 +210,21 @@ void fill_inplace(Tensor& a, float v) {
   k.fill(current_stream(a.device()), v, a.device_ptr(), a.numel());
 }
 
+void fill_from(Tensor& a, const Tensor& value) {
+  same_device(a, value, "fill_from");
+  require_contiguous(a, "fill_from");
+
+  if (value.numel() != 1) {
+    throw std::invalid_argument("fill_from: value must be a single element");
+  }
+  if (a.dtype() != value.dtype()) {
+    throw std::invalid_argument("fill_from: dtypes must match");
+  }
+
+  const auto& k = nn::kernels::kernels(a.device());
+  k.fill_from(current_stream(a.device()), value.device_ptr(), a.device_ptr(), a.numel());
+}
+
 void softmax_ce(const Tensor& logits, const Tensor& labels, Tensor& loss_out, Tensor& probs) {
   same_device(logits, labels, "softmax_ce");
   same_device(labels, loss_out, "softmax_ce");
@@ -312,6 +327,41 @@ void copy_strided(const Tensor& dst, const Tensor& src) {
       k.copy_strided_i32(s, src.device_ptr_i32(), v, dst.device_ptr_i32(), src.numel());
       break;
   }
+}
+
+void copy_into(Tensor& dst, const Tensor& src) {
+  same_device(dst, src, "copy_into");
+
+  if (dst.shape() != src.shape()) {
+    throw std::invalid_argument("copy_into: dst and src must have the same shape");
+  }
+  if (dst.dtype() != src.dtype()) {
+    throw std::invalid_argument("copy_into: dst and src must have the same dtype");
+  }
+  if (dst.dtype() != DType::F32) {
+    throw std::invalid_argument("copy_into: only F32 is supported");
+  }
+
+  const Tensor packed = src.contiguous();
+
+  const auto& k = nn::kernels::kernels(dst.device());
+  k.copy_into_strided(current_stream(dst.device()), packed.device_ptr(),
+                      dst.device_ptr(), view_of(dst), dst.numel());
+}
+
+Tensor sum_all(const Tensor& x) {
+  Tensor out(Shape{}, x.device(), x.dtype());
+  Tensor workspace(Shape{nn::kernels::kSumAllWorkspace}, x.device(), x.dtype());
+
+  const auto& k = nn::kernels::kernels(x.device());
+  const Stream& s = current_stream(x.device());
+  if (x.is_contiguous()) {
+    k.sum_all(s, x.device_ptr(), out.device_ptr(), workspace.device_ptr(), x.numel());
+  } else {
+    k.sum_all_strided(s, x.device_ptr(), view_of(x), out.device_ptr(),
+                      workspace.device_ptr(), x.numel());
+  }
+  return out;
 }
 
 }

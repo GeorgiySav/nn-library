@@ -2,6 +2,7 @@
 
 #include <initializer_list>
 #include <cassert>
+#include <span>
 
 namespace nn {
 
@@ -14,6 +15,12 @@ public:
       data_[size_++] = v;
     }
   }
+  SmallVec(size_t n) {
+    assert(n <= N);
+    size_ = n;
+  }
+
+  std::span<T> span() { return {data_, size_t(size_)}; }
 
   void push_back(const T& v) {
     assert(size_ < N);

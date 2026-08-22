@@ -16,6 +16,7 @@ void cublas_gemm(const Stream& s, const float* A, const float* B, float* C,
                bool transA, bool transB);
 
 void cuda_fill(const Stream& s, float v, float* X, int64_t n);
+void cuda_fill_from(const Stream& s, const float* src, float* X, int64_t n);
 void cuda_scale(const Stream& s, float alpha, float* X, int64_t n);
 void cuda_axpy(const Stream& s, float alpha, const float* X, float* Y, int64_t n);
 void cuda_add(const Stream& s, const float* A, const float* B, float* C, int64_t n);
@@ -46,4 +47,11 @@ void cuda_copy_strided(const Stream& s, const float* src, TensorView v,
                        float* dst, int64_t n);
 void cuda_copy_strided_i32(const Stream& s, const int32_t* src, TensorView v,
                            int32_t* dst, int64_t n);
+void cuda_copy_into_strided(const Stream& s, const float* src,
+                            float* dst, TensorView vdst, int64_t n);
+
+void cuda_sum_all(const Stream& s, const float* X, float* out,
+                  float* workspace, int64_t n);
+void cuda_sum_all_strided(const Stream& s, const float* X, TensorView v,
+                          float* out, float* workspace, int64_t n);
 }

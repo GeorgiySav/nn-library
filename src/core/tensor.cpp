@@ -208,6 +208,8 @@ Tensor Tensor::to(Device d) const {
 }
 
 Tensor Tensor::clone() const {
+  if (!is_contiguous()) return contiguous();
+
   Tensor t(shape_, device(), dtype_);
   copy_bytes(t.raw(), device(), raw(), device(),
              size_t(numel()) * dtype_size(dtype_));

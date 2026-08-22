@@ -118,7 +118,7 @@ void Tape::backward(const Tensor& loss, bool retain_graph) {
           continue;
         }
         if (!grads_[input_id].defined()) {
-          grads_[input_id] = std::move(g_in[k]);
+          grads_[input_id] = g_in[k].contiguous();
         }
         else {
           nn::ops::add_inplace(grads_[input_id], g_in[k]);

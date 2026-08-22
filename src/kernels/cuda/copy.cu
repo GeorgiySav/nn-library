@@ -43,4 +43,27 @@ void cuda_copy_strided_i32(const Stream& s, const int32_t* src, TensorView v,
   launch(s, src, v, dst, n);
 }
 
+namespace {
+
+__global__ void copy_into_strided_kernel(const float* __restrict__ src,
+                                         float* __restrict__ dst,
+                                         TensorView v, int64_t n) {
+  for (int64_t i = blockIdx.x * int64_t(blockDim.x) + threadIdx.x;
+       i < n;
+       i += int64_t(gridDim.x) * blockDim.x) {
+    dst[offset_of(v, i)] = src[i];
+  }
+}
+
+}  // namespace
+
+void cuda_copy_into_strided(const Stream& s, const float* src,
+                            float* dst, TensorView v, int64_t n) {
+  if (n == 0) return;
+  auto stream = static_cast<cudaStream_t>(s.handle);
+  const int grid = int(std::min<int64_t>((n + kBlock - 1) / kBlock, kMaxGrid));
+  copy_into_strided_kernel<<<grid, kBlock, 0, stream>>>(src, dst, v, n);
+  NN_CUDA_CHECK_LAUNCH(stream);
+}
+
 }

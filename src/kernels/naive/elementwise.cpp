@@ -50,6 +50,13 @@ void naive_fill(const Stream& s, float v, float* X, int64_t n) {
   }
 }
 
+void naive_fill_from(const Stream&, const float* src, float* X, int64_t n) {
+  const float v = *src;
+  for (int64_t i{0}; i < n; ++i) {
+    X[i] = v;
+  }
+}
+
 void naive_scale(const Stream& s, float alpha, float* X, int64_t n) {
   for (int64_t i{0}; i < n; ++i) {
     X[i] *= alpha;

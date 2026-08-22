@@ -25,4 +25,11 @@ void naive_copy_strided_i32(const Stream&, const int32_t* src, TensorView v,
   copy_strided_impl(src, v, dst, n);
 }
 
+void naive_copy_into_strided(const Stream&, const float* src,
+                             float* dst, TensorView v, int64_t n) {
+  for (int64_t i = 0; i < n; ++i) {
+    dst[offset_of(v, i)] = src[i];
+  }
+}
+
 }

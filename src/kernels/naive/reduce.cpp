@@ -2,6 +2,8 @@
 
 #include <nn/core/device.h>
 
+#include "../strided_index.h"
+
 namespace nn::kernels {
 
 void naive_col_sum(const Stream& s, const float* X, float* out, int M, int N, int64_t sx) {
@@ -31,6 +33,19 @@ void naive_argmax_rows(const Stream& s, const float* X, int32_t* out, int M, int
     }
     out[i] = int32_t(best);
   }
+}
+
+void naive_sum_all(const Stream&, const float* X, float* out, float*, int64_t n) {
+  double acc = 0.0;
+  for (int64_t i = 0; i < n; ++i) acc += double(X[i]);
+  *out = float(acc);
+}
+
+void naive_sum_all_strided(const Stream&, const float* X, TensorView v,
+                           float* out, float*, int64_t n) {
+  double acc = 0.0;
+  for (int64_t i = 0; i < n; ++i) acc += double(X[offset_of(v, i)]);
+  *out = float(acc);
 }
 
 }
