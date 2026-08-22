@@ -13,9 +13,6 @@ nn::kernels::SoftmaxCeFn softmax_ce(nn::Device d) {
   return k.softmax_ce;
 }
 
-// The kernel writes the loss through a pointer, so on a device backend that
-// pointer has to be device memory -- a float on the host stack would not be
-// addressable from the kernel.
 struct SoftmaxOut {
   nn::Tensor loss;
   nn::Tensor probs;
@@ -26,7 +23,7 @@ SoftmaxOut run_softmax_ce(const nn::Tensor& logits, const nn::Tensor& labels,
   SoftmaxOut out{nn::Tensor::scalar(0.0f, d),
                  nn::Tensor::full({M, N}, -1.0f, d)};
   softmax_ce(d)(nn::current_stream(d), logits.device_ptr(), labels.device_ptr_i32(),
-                out.loss.device_ptr(), out.probs.device_ptr(), M, N);
+                out.loss.device_ptr(), out.probs.device_ptr(), M, N, /*sz=*/N);
   return out;
 }
 
@@ -140,9 +137,6 @@ NN_TEST(test_mean_not_sum) {
 }
 
 NN_TEST(test_backward_against_finite_difference) {
-  // random [3, 5] logits and random labels, perturb each of the 15
-  // logits by h=1e-3 and compare (loss(+h) - loss(-h)) / (2*h)
-  // against the analytic g_logits with tolerance 2e-2
   const int M = 3, N = 5;
 
   NN_TEST_FOR_EACH_DEVICE(dev) {
@@ -166,7 +160,7 @@ NN_TEST(test_backward_against_finite_difference) {
     nn::Tensor g_logits = nn::Tensor::full({M, N}, -1.0f, dev);
     k.softmax_ce_backward(nn::current_stream(dev), r.probs.device_ptr(),
                           labels.device_ptr_i32(), g_loss.device_ptr(),
-                          g_logits.device_ptr(), M, N);
+                          g_logits.device_ptr(), M, N, /*sp=*/N);
 
     const nn::Tensor g = g_logits.to(nn::Device::CPU);
 
@@ -208,7 +202,7 @@ NN_TEST(test_gradient_rows_sum_to_zero) {
     nn::Tensor g_logits = nn::Tensor::full({M, N}, -1.0f, dev);
     k.softmax_ce_backward(nn::current_stream(dev), r.probs.device_ptr(),
                           labels.device_ptr_i32(), g_loss.device_ptr(),
-                          g_logits.device_ptr(), M, N);
+                          g_logits.device_ptr(), M, N, /*sp=*/N);
 
     const nn::Tensor g = g_logits.to(nn::Device::CPU);
     for (int i{0}; i < M; ++i) {

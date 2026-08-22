@@ -8,10 +8,11 @@
 namespace nn::kernels {
 
 __global__ void softmax_ce_kernel(const float* logits, const int32_t* labels,
-                                  float* loss_out, float* probs, int M, int N) {
+                                  float* loss_out, float* probs, int M, int N, int64_t sz) {
   // one block per row
   // M blocks, each with 256 threads
   // striding across N columns
+  // sz is the logits row stride (== N when dense); probs is always dense
   const float max_identity = -FLT_MAX;
   
   __shared__ float sum_bcast;
@@ -19,7 +20,7 @@ __global__ void softmax_ce_kernel(const float* logits, const int32_t* labels,
   __shared__ int32_t label;
 
   for (int64_t row = blockIdx.x; row < M; row += gridDim.x) {
-    const float* z = logits + row * N;
+    const float* z = logits + row * sz;
     float* p = probs + row * N;
     
     // Max
@@ -64,12 +65,12 @@ __global__ void softmax_ce_kernel(const float* logits, const int32_t* labels,
 }
 
 __global__ void softmax_ce_backward_kernel(const float* probs, const int32_t* labels,
-                                const float* g_loss, float* g_logits, int M, int N) {
+                                const float* g_loss, float* g_logits, int M, int N, int64_t sp) {
 
   const float scale = *g_loss / float(M);
 
   for (int64_t row = blockIdx.x; row < M; row += gridDim.x) {
-    const float* p = probs + row * N;
+    const float* p = probs + row * sp;
     float* g = g_logits + row * N;
     const int32_t label = labels[row];
 
@@ -86,7 +87,7 @@ __global__ void softmax_ce_backward_kernel(const float* probs, const int32_t* la
 }
 
 void cuda_softmax_ce(const Stream& s, const float* logits, const int32_t* labels,
-                     float* loss_out, float* probs, int M, int N) {
+                     float* loss_out, float* probs, int M, int N, int64_t sz) {
   if (M == 0 || N == 0) return;
 
   auto stream = static_cast<cudaStream_t>(s.handle);
@@ -96,12 +97,12 @@ void cuda_softmax_ce(const Stream& s, const float* logits, const int32_t* labels
 
   cudaMemsetAsync(loss_out, 0, sizeof(float), stream);
 
-  softmax_ce_kernel<<<grid, block, 0, stream>>>(logits, labels, loss_out, probs, M, N);
+  softmax_ce_kernel<<<grid, block, 0, stream>>>(logits, labels, loss_out, probs, M, N, sz);
   NN_CUDA_CHECK_LAUNCH(stream);
 }
 
 void cuda_softmax_ce_backward(const Stream& s, const float* probs, const int32_t* labels,
-                              const float* g_loss, float* g_logits, int M, int N) {
+                              const float* g_loss, float* g_logits, int M, int N, int64_t sp) {
   if (M == 0 || N == 0) return;
 
   auto stream = static_cast<cudaStream_t>(s.handle);
@@ -109,7 +110,7 @@ void cuda_softmax_ce_backward(const Stream& s, const float* probs, const int32_t
   constexpr int kMaxGrid{4096};
   int grid = std::min(M, kMaxGrid);
 
-  softmax_ce_backward_kernel<<<grid, block, 0, stream>>>(probs, labels, g_loss, g_logits, M, N);
+  softmax_ce_backward_kernel<<<grid, block, 0, stream>>>(probs, labels, g_loss, g_logits, M, N, sp);
   NN_CUDA_CHECK_LAUNCH(stream);
 }
 

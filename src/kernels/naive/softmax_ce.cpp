@@ -8,9 +8,10 @@
 namespace nn::kernels {
 
 void naive_softmax_ce(const Stream& s, const float* logits, const int32_t* labels,
-                      float* loss_out, float* probs, int M, int N) {
+                      float* loss_out, float* probs, int M, int N, int64_t sz) {
   /*
-  logits: [M, N]
+  logits: [M, N], row stride sz (== N when dense); probs is dense output
+
   labels: [M] (int32)
   *loss_out: mean cross-entropy over the batch
   probs: [M, N] (softmax probabilities)
@@ -24,7 +25,7 @@ void naive_softmax_ce(const Stream& s, const float* logits, const int32_t* label
   float total_loss = 0.0f;
 
   for (int i{0}; i < M; ++i) {
-    const float* z = logits + static_cast<int64_t>(i) * N;
+    const float* z = logits + static_cast<int64_t>(i) * sz;
     float* p = probs + static_cast<int64_t>(i) * N;
 
     const int32_t label = labels[i];
@@ -56,9 +57,10 @@ void naive_softmax_ce(const Stream& s, const float* logits, const int32_t* label
 }
 
 void naive_softmax_ce_backward(const Stream& s, const float* probs, const int32_t* labels,
-                               const float* g_loss, float* g_logits, int M, int N) {
+                               const float* g_loss, float* g_logits, int M, int N, int64_t sp) {
   /*
-  probs: [M, N] (softmax probabilities)
+  probs: [M, N] (softmax probabilities), row stride sp; g_logits is dense output
+
   labels: [M] (int32)
   g_loss: gradient of the loss w.r.t. the output
   g_logits: [M, N] (gradient of the loss w.r.t. the logits)
@@ -68,7 +70,7 @@ void naive_softmax_ce_backward(const Stream& s, const float* probs, const int32_
   const float scale = (M > 0) ? *g_loss / static_cast<float>(M) : 0.0f;
 
   for (int i{0}; i < M; ++i) {
-    const float* p = probs + static_cast<int64_t>(i) * N;
+    const float* p = probs + static_cast<int64_t>(i) * sp;
     float* g = g_logits + static_cast<int64_t>(i) * N;
 
     const int32_t label = labels[i];

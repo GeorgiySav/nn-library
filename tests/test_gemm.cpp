@@ -13,6 +13,15 @@ nn::kernels::GemmFn gemm(nn::Device d) {
   return k.gemm;
 }
 
+// Every operand in this file is dense, so each leading dimension is the extent
+// it used to be hard-coded as. Strided operands are covered in test_views.cpp.
+void gemm_dense(nn::Device d, const nn::Stream& s, const float* A, const float* B,
+                float* C, int M, int N, int K, bool transA, bool transB) {
+  gemm(d)(s, A, B, C, M, N, K,
+          /*lda=*/transA ? M : K, /*ldb=*/transB ? K : N, /*ldc=*/N,
+          transA, transB);
+}
+
 void ref_gemm(const float* A, const float* B, float* C, int M, int N, int K) {
   for (int m{0}; m < M; ++m) {
     for (int n{0}; n < N; ++n) {
@@ -54,7 +63,7 @@ NN_TEST(test_gemm) {
     const nn::Tensor B = nn::Tensor::from({7.0f, 8.0f, 9.0f, 10.0f, 11.0f, 12.0f}, dev);
     nn::Tensor C = nn::Tensor::full({4}, -1.0f, dev);
 
-    gemm(dev)(nn::current_stream(dev), A.device_ptr(), B.device_ptr(),
+    gemm_dense(dev, nn::current_stream(dev), A.device_ptr(), B.device_ptr(),
               C.device_ptr(), 2, 2, 3, false, false);
 
     const nn::Tensor h = C.to(nn::Device::CPU);
@@ -71,7 +80,7 @@ NN_TEST(test_gemm_transA) {
     const nn::Tensor B = nn::Tensor::from({7.0f, 8.0f, 9.0f, 10.0f, 11.0f, 12.0f}, dev);
     nn::Tensor C = nn::Tensor::full({4}, -1.0f, dev);
 
-    gemm(dev)(nn::current_stream(dev), A.device_ptr(), B.device_ptr(),
+    gemm_dense(dev, nn::current_stream(dev), A.device_ptr(), B.device_ptr(),
               C.device_ptr(), 2, 2, 3, true, false);
 
     const nn::Tensor h = C.to(nn::Device::CPU);
@@ -88,7 +97,7 @@ NN_TEST(test_gemm_transB) {
     const nn::Tensor B = nn::Tensor::from({7.0f, 9.0f, 11.0f, 8.0f, 10.0f, 12.0f}, dev);
     nn::Tensor C = nn::Tensor::full({4}, -1.0f, dev);
 
-    gemm(dev)(nn::current_stream(dev), A.device_ptr(), B.device_ptr(),
+    gemm_dense(dev, nn::current_stream(dev), A.device_ptr(), B.device_ptr(),
               C.device_ptr(), 2, 2, 3, false, true);
 
     const nn::Tensor h = C.to(nn::Device::CPU);
@@ -116,10 +125,10 @@ NN_TEST(test_gemm_trans_consistency) {
     nn::Tensor c4   = nn::Tensor::zeros({M, N}, dev);
 
     const nn::Stream& s = nn::current_stream(dev);
-    gemm(dev)(s, A.dev.device_ptr(), B.dev.device_ptr(), base.device_ptr(), M, N, K, false, false);
-    gemm(dev)(s, At.device_ptr(),    B.dev.device_ptr(), c2.device_ptr(),   M, N, K, true,  false);
-    gemm(dev)(s, A.dev.device_ptr(), Bt.device_ptr(),    c3.device_ptr(),   M, N, K, false, true);
-    gemm(dev)(s, At.device_ptr(),    Bt.device_ptr(),    c4.device_ptr(),   M, N, K, true,  true);
+    gemm_dense(dev, s, A.dev.device_ptr(), B.dev.device_ptr(), base.device_ptr(), M, N, K, false, false);
+    gemm_dense(dev, s, At.device_ptr(),    B.dev.device_ptr(), c2.device_ptr(),   M, N, K, true,  false);
+    gemm_dense(dev, s, A.dev.device_ptr(), Bt.device_ptr(),    c3.device_ptr(),   M, N, K, false, true);
+    gemm_dense(dev, s, At.device_ptr(),    Bt.device_ptr(),    c4.device_ptr(),   M, N, K, true,  true);
 
     const nn::Tensor hb = base.to(nn::Device::CPU);
     const nn::Tensor h2 = c2.to(nn::Device::CPU);
@@ -143,7 +152,7 @@ NN_TEST(test_gemm_outer_product) {
     const nn::Tensor B = nn::Tensor::from(b, nn::Shape({1, 4}), dev);
     nn::Tensor C = nn::Tensor::full({3, 4}, -1.0f, dev);
 
-    gemm(dev)(nn::current_stream(dev), A.device_ptr(), B.device_ptr(),
+    gemm_dense(dev, nn::current_stream(dev), A.device_ptr(), B.device_ptr(),
               C.device_ptr(), 3, 4, 1, false, false);
 
     const nn::Tensor h = C.to(nn::Device::CPU);
@@ -164,7 +173,7 @@ NN_TEST(test_gemm_single_row) {
     const Matrix B = random_matrix(K, N, rng, dev);
     nn::Tensor C = nn::Tensor::full({M, N}, -1.0f, dev);
 
-    gemm(dev)(nn::current_stream(dev), A.dev.device_ptr(), B.dev.device_ptr(),
+    gemm_dense(dev, nn::current_stream(dev), A.dev.device_ptr(), B.dev.device_ptr(),
               C.device_ptr(), M, N, K, false, false);
 
     std::vector<float> expected(M*N);
@@ -189,7 +198,7 @@ NN_TEST(test_gemm_identity) {
     const nn::Tensor I = nn::Tensor::from(identity, nn::Shape({n, n}), dev);
 
     nn::Tensor C = nn::Tensor::full({n, n}, -1.0f, dev);
-    gemm(dev)(nn::current_stream(dev), A.dev.device_ptr(), I.device_ptr(),
+    gemm_dense(dev, nn::current_stream(dev), A.dev.device_ptr(), I.device_ptr(),
               C.device_ptr(), n, n, n, false, false);
 
     const nn::Tensor h = C.to(nn::Device::CPU);
@@ -212,13 +221,13 @@ NN_TEST(test_gemm_associativity) {
 
     nn::Tensor AB   = nn::Tensor::zeros({M, P}, dev);
     nn::Tensor AB_C = nn::Tensor::zeros({M, N}, dev);
-    gemm(dev)(s, A.dev.device_ptr(), B.dev.device_ptr(), AB.device_ptr(),   M, P, K, false, false);
-    gemm(dev)(s, AB.device_ptr(),    C.dev.device_ptr(), AB_C.device_ptr(), M, N, P, false, false);
+    gemm_dense(dev, s, A.dev.device_ptr(), B.dev.device_ptr(), AB.device_ptr(),   M, P, K, false, false);
+    gemm_dense(dev, s, AB.device_ptr(),    C.dev.device_ptr(), AB_C.device_ptr(), M, N, P, false, false);
 
     nn::Tensor BC   = nn::Tensor::zeros({K, N}, dev);
     nn::Tensor A_BC = nn::Tensor::zeros({M, N}, dev);
-    gemm(dev)(s, B.dev.device_ptr(), C.dev.device_ptr(), BC.device_ptr(),   K, N, P, false, false);
-    gemm(dev)(s, A.dev.device_ptr(), BC.device_ptr(),    A_BC.device_ptr(), M, N, K, false, false);
+    gemm_dense(dev, s, B.dev.device_ptr(), C.dev.device_ptr(), BC.device_ptr(),   K, N, P, false, false);
+    gemm_dense(dev, s, A.dev.device_ptr(), BC.device_ptr(),    A_BC.device_ptr(), M, N, K, false, false);
 
     const nn::Tensor h1 = AB_C.to(nn::Device::CPU);
     const nn::Tensor h2 = A_BC.to(nn::Device::CPU);

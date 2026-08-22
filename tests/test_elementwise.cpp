@@ -118,7 +118,7 @@ NN_TEST(test_add_row_bias) {
     nn::Tensor b = nn::Tensor::from({10, 20, 30}, dev);
     nn::Tensor Y = nn::Tensor::zeros({2, 3}, dev);
     k.add_row_bias(nn::current_stream(dev), X.device_ptr(), b.device_ptr(),
-                   Y.device_ptr(), 2, 3);
+                   Y.device_ptr(), 2, 3, /*sx=*/3);
 
     const nn::Tensor h = Y.to(nn::Device::CPU);
     NN_CHECK(h.host_data()[0] == 11.0f);
@@ -136,7 +136,7 @@ NN_TEST(test_col_sum) {
 
     nn::Tensor X   = nn::Tensor::from({{1, 2, 3}, {4, 5, 6}}, dev);
     nn::Tensor out = nn::Tensor::zeros({3}, dev);
-    k.col_sum(nn::current_stream(dev), X.device_ptr(), out.device_ptr(), 2, 3);
+    k.col_sum(nn::current_stream(dev), X.device_ptr(), out.device_ptr(), 2, 3, /*sx=*/3);
 
     const nn::Tensor h = out.to(nn::Device::CPU);
     NN_CHECK(h.host_data()[0] == 5.0f);

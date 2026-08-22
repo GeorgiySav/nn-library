@@ -5,6 +5,8 @@
 namespace nn::ops {
 
 Tensor matmul(const Tensor& a, const Tensor& b, bool transA = false, bool transB = false);
+void   matmul_into(Tensor& out, const Tensor& a, const Tensor& b,
+                   bool transA = false, bool transB = false);
 Tensor add_row_bias(const Tensor& x, const Tensor& bias);
 Tensor col_sum(const Tensor& x);
 Tensor relu(const Tensor& x);
@@ -23,4 +25,6 @@ Tensor argmax_rows(const Tensor& x);
 
 void adam(const Tensor& p, const Tensor& g, Tensor& m, Tensor& v,
           float lr, float beta1, float beta2, float eps, int step);
+
+void copy_strided(const Tensor& dst, const Tensor& src);
 }

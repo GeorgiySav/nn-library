@@ -6,23 +6,34 @@
 
 namespace nn::kernels {
 
+// The leading dimension is the stride of the second-to-last axis of the operand
+// as stored. It does not depend on the transpose flag: transposing changes which
+// index multiplies it, not the layout.
+//
+//   transA=false  A is [M,K]  A[m*lda + k]   lda >= K
+//   transA=true   A is [K,M]  A[k*lda + m]   lda >= M
+//   transB=false  B is [K,N]  B[k*ldb + n]   ldb >= N
+//   transB=true   B is [N,K]  B[n*ldb + k]   ldb >= K
+//
+// Only the [M,N] window of C is written; the ldc padding is never touched.
 template<bool transA, bool transB>
 __global__ void naive_gemm_kernel(const float* __restrict__ A, const float* __restrict__ B,
-                            float* __restrict__ C, int M, int N, int K) {
+                            float* __restrict__ C, int M, int N, int K,
+                            int64_t lda, int64_t ldb, int64_t ldc) {
   const int64_t n = int64_t(blockIdx.x) * blockDim.x + threadIdx.x;
   const int64_t m = int64_t(blockIdx.y) * blockDim.y + threadIdx.y;
   if (m >= M || n >= N) return;
 
-  const float* a = A + (transA ? m : m * K);
-  const float* b = B + (transB ? n * K : n);
-  const int64_t a_stride = transA ? M : 1;
-  const int64_t b_stride = transB ? 1 : N;
+  const float* a = A + (transA ? m : m * lda);
+  const float* b = B + (transB ? n * ldb : n);
+  const int64_t a_stride = transA ? lda : 1;
+  const int64_t b_stride = transB ? 1 : ldb;
 
   float acc = 0.0f;
   for (int k = 0; k < K; ++k) {
     acc = fmaf(a[k * a_stride], b[k * b_stride], acc);
   }
-  C[m * N + n] = acc;
+  C[m * ldc + n] = acc;
 }
 
 namespace {
@@ -39,7 +50,8 @@ constexpr int kPad = 4;
 
 template<bool transA, bool transB>
 __global__ void gemm_kernel(const float* __restrict__ A, const float* __restrict__ B,
-                            float* __restrict__ C, int M, int N, int K) {
+                            float* __restrict__ C, int M, int N, int K,
+                            int64_t lda, int64_t ldb, int64_t ldc) {
   __shared__ float As[BK][BM + kPad];
   __shared__ float Bs[BK][BN + kPad];
 
@@ -63,7 +75,7 @@ __global__ void gemm_kernel(const float* __restrict__ A, const float* __restrict
       }
       const int64_t m = bm + ai, k = k0 + ak;
       As[ak][ai] = (m < M && k < K)
-                 ? (transA ? A[k * M + m] : A[m * K + k])
+                 ? (transA ? A[k * lda + m] : A[m * lda + k])
                  : 0.0f;
     }
 
@@ -79,7 +91,7 @@ __global__ void gemm_kernel(const float* __restrict__ A, const float* __restrict
       }
       const int64_t n = bn + bj, k = k0 + bk;
       Bs[bk][bj] = (n < N && k < K)
-                 ? (transB ? B[n * K + k] : B[k * N + n])
+                 ? (transB ? B[n * ldb + k] : B[k * ldb + n])
                  : 0.0f;
     }
 
@@ -106,7 +118,9 @@ __global__ void gemm_kernel(const float* __restrict__ A, const float* __restrict
     const int64_t m = bm + ty * TM + i;
     if (m >= M) continue;
     const int64_t n0  = bn + tx * TN;
-    const int64_t off = m * N + n0;
+    // off is the real element index, so the float4 guard tests real alignment;
+    // with a general ldc some rows fall back to the scalar path below.
+    const int64_t off = m * ldc + n0;
     if (n0 + TN <= N && (off & 3) == 0) {
       *reinterpret_cast<float4*>(&C[off]) =
         float4{acc[i][0], acc[i][1], acc[i][2], acc[i][3]};
@@ -142,24 +156,26 @@ cublasHandle_t handle() {
 }
 
 void cuda_gemm(const Stream& s, const float* A, const float* B, float* C,
-               int M, int N, int K, bool transA, bool transB) {
+               int M, int N, int K, int64_t lda, int64_t ldb, int64_t ldc,
+               bool transA, bool transB) {
   if (M == 0 || N == 0) return;
 
   auto stream = static_cast<cudaStream_t>(s.handle);
   const dim3 block(16, 16); // 256 threads
   const dim3 grid((N + BN - 1) / BN,
                   (M + BM - 1) / BM);
-  
-  if      (!transA && !transB) gemm_kernel<false, false><<<grid, block, 0, stream>>>(A, B, C, M, N, K);
-  else if ( transA && !transB) gemm_kernel< true, false><<<grid, block, 0, stream>>>(A, B, C, M, N, K);
-  else if (!transA &&  transB) gemm_kernel<false,  true><<<grid, block, 0, stream>>>(A, B, C, M, N, K);
-  else if ( transA &&  transB) gemm_kernel< true,  true><<<grid, block, 0, stream>>>(A, B, C, M, N, K);
+
+  if      (!transA && !transB) gemm_kernel<false, false><<<grid, block, 0, stream>>>(A, B, C, M, N, K, lda, ldb, ldc);
+  else if ( transA && !transB) gemm_kernel< true, false><<<grid, block, 0, stream>>>(A, B, C, M, N, K, lda, ldb, ldc);
+  else if (!transA &&  transB) gemm_kernel<false,  true><<<grid, block, 0, stream>>>(A, B, C, M, N, K, lda, ldb, ldc);
+  else if ( transA &&  transB) gemm_kernel< true,  true><<<grid, block, 0, stream>>>(A, B, C, M, N, K, lda, ldb, ldc);
 
   NN_CUDA_CHECK_LAUNCH(stream);
 }
 
 void cublas_gemm(const Stream& s, const float* A, const float* B, float* C,
-               int M, int N, int K, bool transA, bool transB) {
+               int M, int N, int K, int64_t lda, int64_t ldb, int64_t ldc,
+               bool transA, bool transB) {
   if (M == 0 || N == 0) return;
 
   cublasHandle_t h = handle();
@@ -167,16 +183,20 @@ void cublas_gemm(const Stream& s, const float* A, const float* B, float* C,
 
   constexpr float alpha = 1.0f, beta = 0.0f;
 
+  // cuBLAS is column-major, so row-major C = A*B is column-major C^T = B^T*A^T:
+  // pass B first, swap M and N. Each operand's op flag and ld depend only on
+  // itself, which is why the ld arguments pass straight through -- the old
+  // hard-coded expressions were exactly ldb/lda/ldc for a dense operand.
   NN_CUBLAS_CHECK(cublasSgemm(
     h,
     transB ? CUBLAS_OP_T : CUBLAS_OP_N,
     transA ? CUBLAS_OP_T : CUBLAS_OP_N,
     N, M, K,
     &alpha,
-    B, transB ? K : N,
-    A, transA ? M : K,
+    B, int(ldb),
+    A, int(lda),
     &beta,
-    C, N
+    C, int(ldc)
   ));
 }
 

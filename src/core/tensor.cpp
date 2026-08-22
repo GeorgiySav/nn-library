@@ -5,6 +5,7 @@
 #include <vector>
 
 #include <nn/core/allocator.h>
+#include <nn/ops/ops.h>
 
 namespace nn {
 
@@ -20,6 +21,7 @@ Tensor host_init(Shape s, Device d, DType t, Init&& init) {
 }
 
 Tensor::Tensor(Shape s, Device d, DType t) : shape_(s), dtype_(t) {
+  strides_ = Strides::contiguous_for(shape_);
   size_t bytes = shape_.numel() * dtype_size(dtype_);
   storage_ = std::make_shared<Storage>(bytes, d);
 }
@@ -87,9 +89,78 @@ Tensor Tensor::from_i32(std::initializer_list<int32_t> values, Device d, DType t
                   Shape({static_cast<int>(values.size())}), d, t);
 }
 
+Tensor Tensor::view_like(const Shape& s, const Strides& strides, int64_t offset) const {
+  Tensor v;
+  v.storage_ = storage_;
+  v.shape_ = s;
+  v.strides_ = strides;
+  v.offset_ = offset;
+  v.dtype_ = dtype_;
+  return v;
+}
+
+Tensor Tensor::contiguous() const {
+  if (is_contiguous()) return *this;
+  Tensor out(shape_, device(), dtype_);
+  ops::copy_strided(out, *this);
+  return out;
+}
+
+bool Tensor::is_contiguous() const {
+  int64_t expected_stride = 1;
+  for (int i = shape_.rank() - 1; i >= 0; --i) {
+    if (shape_.dim(i) == 1) continue; // stride doesn't matter for size-1 dims
+    if (strides_.at(i) != expected_stride) return false;
+    expected_stride *= shape_.dim(i);
+  }
+  return true;
+}
+
+Tensor Tensor::permute(std::span<const int> order) const {
+  assert(int(order.size()) == shape_.rank());
+
+  Shape new_shape = shape_;
+  Strides new_strides(shape_.rank());
+  bool seen[kMaxShapeRank] = {false};
+  for (int i = 0; i < shape_.rank(); ++i) {
+    const int src = order[i];
+    assert(src >= 0 && src < shape_.rank() && !seen[src] && "invalid permutation");
+    seen[src] = true;
+    new_shape.set_dim(i, shape_.dim(src));
+    new_strides.at(i) = strides_.at(src);
+  }
+
+  Tensor v = view_like(new_shape, new_strides, offset_);
+  return v;
+}
+
+Tensor Tensor::transpose(int a, int b) const {
+  int order[kMaxShapeRank];
+  for (int i = 0; i < shape_.rank(); ++i) order[i] = i;
+  std::swap(order[a], order[b]);
+  return permute(std::span<const int>(order, shape_.rank()));
+}
+
+Tensor Tensor::reshape(Shape s) const {
+  assert(s.numel() == numel() && "reshape must preserve number of elements");
+  if (!is_contiguous()) return contiguous().reshape(s);
+  return view_like(s, Strides::contiguous_for(s), offset_);
+}
+
+Tensor Tensor::slice(int axis, int64_t start, int64_t len) const {
+  assert(axis >= 0 && axis < shape_.rank());
+  assert(start >= 0 && len >= 0 && start + len <= shape_.dim(axis));
+
+  Shape new_shape = shape_;
+  new_shape.set_dim(axis, int(len));
+  int64_t new_offset = offset_ + start * strides_.at(axis);
+
+  return view_like(new_shape, strides_, new_offset);
+}
+
 float* Tensor::device_ptr() const {
   assert(dtype_ == DType::F32);
-  return static_cast<float*>(storage_->data());
+  return static_cast<float*>(storage_->data()) + offset_;
 }
 
 int32_t* Tensor::device_ptr_i32() const {
@@ -110,7 +181,8 @@ int32_t* Tensor::host_data_i32() const {
 }
 
 void* Tensor::raw() {
-  return storage_->data();
+  assert(is_contiguous() && "raw() on a non-contiguous tensor");
+  return static_cast<char*>(storage_->data()) + offset_ * dtype_size(dtype_);
 }
 
 const void* Tensor::raw() const {
@@ -126,6 +198,7 @@ float Tensor::item() const {
 Tensor Tensor::to(Device d) const {
   if (!storage_) return Tensor{};
   if (device() == d) return *this;
+  if (!is_contiguous()) return contiguous().to(d);
 
   Tensor out(shape_, d, dtype_);
   copy_bytes(out.raw(), d, raw(), device(),
@@ -171,6 +244,16 @@ void Tensor::zero_grad() {
   if (meta_ && meta_->grad.defined())
     memset_bytes(meta_->grad.raw(), meta_->grad.device(), 0,
                  meta_->grad.numel() * dtype_size(dtype_));
+}
+
+TensorView view_of(const Tensor& t) {
+  TensorView v;
+  v.rank = t.shape().rank();
+  for (int i = 0; i < v.rank; ++i) {
+    v.shape[i] = t.shape().dim(i);
+    v.stride[i] = t.stride(i);
+  }
+  return v;
 }
 
 }

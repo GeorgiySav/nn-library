@@ -3,10 +3,11 @@
 #include <memory>
 #include <span>
 
-#include "rng.h"
-#include "dtype.h"
-#include "shape.h"
-#include "storage.h"
+#include <nn/core/rng.h>
+#include <nn/core/dtype.h>
+#include <nn/core/shape.h>
+#include <nn/core/storage.h>
+#include <nn/core/strides.h>
 
 namespace nn {
 
@@ -28,11 +29,25 @@ public:
   static Tensor from(std::span<const float> values, Shape s, Device d = Device::CPU, DType t = DType::F32);
   static Tensor from_i32(std::span<const int32_t> values, Shape s, Device d = Device::CPU, DType t = DType::I32);
 
+  Tensor view_like(const Shape& s, const Strides&, int64_t offset) const;
+
   const Shape& shape() const { return shape_; }
   int64_t numel() const { return shape_.numel(); }
   Device device() const { return storage_->device(); }
   DType dtype() const { return dtype_; }
   bool defined() const { return storage_ != nullptr; }
+
+  const Strides& strides() const { return strides_; }
+  int64_t stride(int i) const { return strides_.at(i); }
+  int64_t offset() const { return offset_; }
+
+  Tensor contiguous() const;
+  bool is_contiguous() const;
+
+  Tensor permute(std::span<const int> order) const;
+  Tensor transpose(int a, int b) const;
+  Tensor reshape(Shape s) const;
+  Tensor slice(int axis, int64_t start, int64_t len) const;
 
   // Address in the owning device's address space. NOT dereferenceable on the
   // host unless device() == Device::CPU. For passing to kernels only.
@@ -64,9 +79,13 @@ public:
 private:
   std::shared_ptr<Storage> storage_;
   Shape shape_;
+  Strides strides_;
+  int64_t offset_ = 0;
   DType dtype_ = DType::F32;
   mutable std::shared_ptr<AutogradMeta> meta_;
 };
+
+TensorView view_of(const Tensor& t);
 
 struct AutogradMeta {
   bool requires_grad = false;
