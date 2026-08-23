@@ -99,7 +99,7 @@ Tensor Tensor::view_like(const Shape& s, const Strides& strides, int64_t offset)
   return v;
 }
 
-Tensor Tensor::contiguous() const {
+Tensor Tensor::pack() const {
   if (is_contiguous()) return *this;
   Tensor out(shape_, device(), dtype_);
   ops::pack(out, *this);
@@ -116,7 +116,7 @@ bool Tensor::is_contiguous() const {
   return true;
 }
 
-Tensor Tensor::expand(const Shape& to) const {
+Tensor Tensor::expand_view(const Shape& to) const {
   if (to.rank() < shape_.rank()) {
     throw std::invalid_argument("expand: " + shape_.str() + " -> " + to.str() +
                                 " would drop axes");
@@ -137,7 +137,7 @@ Tensor Tensor::expand(const Shape& to) const {
   return view_like(to, st, offset_);
 }
 
-Tensor Tensor::permute(std::span<const int> order) const {
+Tensor Tensor::permute_view(std::span<const int> order) const {
   assert(int(order.size()) == shape_.rank());
 
   Shape new_shape = shape_;
@@ -155,26 +155,38 @@ Tensor Tensor::permute(std::span<const int> order) const {
   return v;
 }
 
-Tensor Tensor::transpose(int a, int b) const {
-  int order[kMaxShapeRank];
-  for (int i = 0; i < shape_.rank(); ++i) order[i] = i;
-  std::swap(order[a], order[b]);
-  return permute(std::span<const int>(order, shape_.rank()));
+Tensor Tensor::permute_view(std::initializer_list<int> order) const {
+  return permute_view(std::span<const int>(order.begin(), order.size()));
 }
 
-Tensor Tensor::reshape(Shape s) const {
+Tensor Tensor::transpose_view(int a, int b) const {
+  const int r = shape_.rank();
+  const int ia = ops::normalise_dim(a, r, "transpose");
+  const int ib = ops::normalise_dim(b, r, "transpose");
+
+  int order[kMaxShapeRank];
+  for (int i = 0; i < r; ++i) order[i] = i;
+  std::swap(order[ia], order[ib]);
+  return permute_view(std::span<const int>(order, r));
+}
+
+Tensor Tensor::reshape_view(Shape s) const {
   assert(s.numel() == numel() && "reshape must preserve number of elements");
-  if (!is_contiguous()) return contiguous().reshape(s);
+  if (!is_contiguous()) return pack().reshape_view(s);
   return view_like(s, Strides::contiguous_for(s), offset_);
 }
 
-Tensor Tensor::slice(int axis, int64_t start, int64_t len) const {
-  assert(axis >= 0 && axis < shape_.rank());
-  assert(start >= 0 && len >= 0 && start + len <= shape_.dim(axis));
+Tensor Tensor::slice_view(int axis, int64_t start, int64_t len) const {
+  const int a = ops::normalise_dim(axis, shape_.rank(), "slice");
+  if (start < 0 || len < 0 || start + len > shape_.dim(a)) {
+    throw std::invalid_argument("slice: [" + std::to_string(start) + ", " +
+                                std::to_string(start + len) + ") is out of range for axis " +
+                                std::to_string(a) + " of " + shape_.str());
+  }
 
   Shape new_shape = shape_;
-  new_shape.set_dim(axis, int(len));
-  int64_t new_offset = offset_ + start * strides_.at(axis);
+  new_shape.set_dim(a, int(len));
+  int64_t new_offset = offset_ + start * strides_.at(a);
 
   return view_like(new_shape, strides_, new_offset);
 }
@@ -220,7 +232,7 @@ float Tensor::item() const {
 Tensor Tensor::to(Device d) const {
   if (!storage_) return Tensor{};
   if (device() == d) return *this;
-  if (!is_contiguous()) return contiguous().to(d);
+  if (!is_contiguous()) return pack().to(d);
 
   Tensor out(shape_, d, dtype_);
   copy_bytes(out.raw(), d, raw(), device(),
@@ -230,7 +242,7 @@ Tensor Tensor::to(Device d) const {
 }
 
 Tensor Tensor::clone() const {
-  if (!is_contiguous()) return contiguous();
+  if (!is_contiguous()) return pack();
 
   Tensor t(shape_, device(), dtype_);
   copy_bytes(t.raw(), device(), raw(), device(),

@@ -54,11 +54,11 @@ NN_TEST(format_reports_layout_only_when_it_is_surprising) {
     NN_CHECK(!has(header(t), "strides"));
     NN_CHECK(!has(header(t), "noncontiguous"));
 
-    const nn::Tensor v = t.transpose(1, 2);
+    const nn::Tensor v = t.transpose_view(1, 2);
     NN_CHECK(has(header(v), "strides=(12, 1, 4)"));
     NN_CHECK(has(header(v), "noncontiguous"));
 
-    const nn::Tensor s = t.slice(2, 1, 2);
+    const nn::Tensor s = t.slice_view(2, 1, 2);
     NN_CHECK(has(header(s), "offset=1"));
   }
 }
@@ -70,10 +70,10 @@ NN_TEST(format_follows_strides_not_storage) {
     const nn::Tensor t = nn::Tensor::from(h, nn::Shape({2, 3, 4}), dev);
 
     const int order[3] = {2, 0, 1};
-    const nn::Tensor v = t.permute(std::span<const int>(order, 3));
-    NN_CHECK(body(v) == body(v.contiguous()));
-    NN_CHECK(body(t.transpose(1, 2)) == body(t.transpose(1, 2).contiguous()));
-    NN_CHECK(body(t.slice(1, 1, 2)) == body(t.slice(1, 1, 2).contiguous()));
+    const nn::Tensor v = t.permute_view(std::span<const int>(order, 3));
+    NN_CHECK(body(v) == body(v.pack()));
+    NN_CHECK(body(t.transpose_view(1, 2)) == body(t.transpose_view(1, 2).pack()));
+    NN_CHECK(body(t.slice_view(1, 1, 2)) == body(t.slice_view(1, 1, 2).pack()));
   }
 }
 

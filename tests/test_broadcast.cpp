@@ -15,7 +15,7 @@
 namespace {
 
 std::vector<float> host_of(const nn::Tensor& t) {
-  const nn::Tensor h = t.contiguous().to(nn::Device::CPU);
+  const nn::Tensor h = t.pack().to(nn::Device::CPU);
   return std::vector<float>(h.host_data(), h.host_data() + h.numel());
 }
 
@@ -46,7 +46,7 @@ NN_TEST(broadcast_shapes_follows_numpy_rules) {
 NN_TEST(expand_is_a_zero_stride_view) {
   NN_TEST_FOR_EACH_DEVICE(dev) {
     const nn::Tensor b = ramp(nn::Shape({4}), dev);
-    const nn::Tensor e = b.expand(nn::Shape({3, 4}));
+    const nn::Tensor e = b.expand_view(nn::Shape({3, 4}));
 
     NN_CHECK(e.shape() == nn::Shape({3, 4}));
     NN_CHECK(e.stride(0) == 0 && e.stride(1) == 1);
@@ -58,8 +58,8 @@ NN_TEST(expand_is_a_zero_stride_view) {
     for (int r = 0; r < 3; ++r)
       for (int c = 0; c < 4; ++c) NN_CHECK_CLOSE(got[size_t(r) * 4 + c], src[c], 0.0f);
 
-    NN_CHECK_THROWS(b.expand(nn::Shape({3, 5})), std::invalid_argument);
-    NN_CHECK_THROWS(nn::Tensor::zeros({3, 4}, dev).expand(nn::Shape({4})),
+    NN_CHECK_THROWS(b.expand_view(nn::Shape({3, 5})), std::invalid_argument);
+    NN_CHECK_THROWS(nn::Tensor::zeros({3, 4}, dev).expand_view(nn::Shape({4})),
                     std::invalid_argument);
   }
 }
@@ -86,8 +86,8 @@ NN_TEST(add_broadcasts) {
       NN_CHECK(got.shape() == c.out);
 
       // reference: materialise both sides, then take the plain dense path
-      const nn::Tensor want = nn::ops::add(a.expand(c.out).contiguous(),
-                                           b.expand(c.out).contiguous());
+      const nn::Tensor want = nn::ops::add(a.expand_view(c.out).pack(),
+                                           b.expand_view(c.out).pack());
       const std::vector<float> g = host_of(got), w = host_of(want);
       for (size_t i = 0; i < g.size(); ++i) NN_CHECK_CLOSE(g[i], w[i], 1e-6f);
     }
@@ -133,11 +133,11 @@ NN_TEST(sum_to_reverses_a_broadcast) {
 NN_TEST(sum_to_handles_a_strided_gradient) {
   NN_TEST_FOR_EACH_DEVICE(dev) {
     const nn::Tensor wide = ramp(nn::Shape({4, 7}), dev);
-    const nn::Tensor g = wide.slice(1, 1, 4);      // [4,4], row stride 7
+    const nn::Tensor g = wide.slice_view(1, 1, 4);      // [4,4], row stride 7
     NN_CHECK(!g.is_contiguous());
 
     const std::vector<float> a = host_of(nn::ops::sum_to(g, nn::Shape({4})));
-    const std::vector<float> b = host_of(nn::ops::sum_to(g.contiguous(), nn::Shape({4})));
+    const std::vector<float> b = host_of(nn::ops::sum_to(g.pack(), nn::Shape({4})));
     for (size_t i = 0; i < a.size(); ++i) NN_CHECK_CLOSE(a[i], b[i], 1e-6f);
   }
 }

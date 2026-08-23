@@ -19,7 +19,7 @@
 namespace {
 
 std::vector<float> host_of(const nn::Tensor& t) {
-  const nn::Tensor h = t.contiguous().to(nn::Device::CPU);
+  const nn::Tensor h = t.pack().to(nn::Device::CPU);
   return std::vector<float>(h.host_data(), h.host_data() + h.numel());
 }
 
@@ -125,12 +125,12 @@ NN_TEST(mean_is_the_sum_over_the_extent) {
 NN_TEST(sum_over_an_axis_absorbs_strides) {
   NN_TEST_FOR_EACH_DEVICE(dev) {
     const nn::Tensor wide = ramp(nn::Shape({4, 9}), dev);
-    const nn::Tensor view = wide.slice(1, 2, 5);
+    const nn::Tensor view = wide.slice_view(1, 2, 5);
     NN_CHECK(!view.is_contiguous());
 
     for (int axis = 0; axis < 2; ++axis) {
       const std::vector<float> a = host_of(nn::ops::sum_dim(view, axis, false));
-      const std::vector<float> b = host_of(nn::ops::sum_dim(view.contiguous(), axis, false));
+      const std::vector<float> b = host_of(nn::ops::sum_dim(view.pack(), axis, false));
       for (size_t i = 0; i < a.size(); ++i) NN_CHECK_CLOSE(a[i], b[i], 1e-6);
     }
   }
@@ -257,10 +257,10 @@ NN_TEST(softmax_handles_rank3_and_row_strides) {
     }
 
     const nn::Tensor wide = nn::Tensor::randn({5, 9}, rng, 1.0f, dev);
-    const nn::Tensor view = wide.slice(1, 3, 4);
+    const nn::Tensor view = wide.slice_view(1, 3, 4);
     NN_CHECK(!view.is_contiguous());
     const std::vector<float> a = host_of(nn::ops::softmax_rows(view));
-    const std::vector<float> b = host_of(nn::ops::softmax_rows(view.contiguous()));
+    const std::vector<float> b = host_of(nn::ops::softmax_rows(view.pack()));
     for (size_t i = 0; i < a.size(); ++i) NN_CHECK_CLOSE(a[i], b[i], 1e-6);
   }
 }
@@ -458,9 +458,9 @@ NN_TEST(masked_fill_composes_with_a_predicate) {
 NN_TEST(i32_views_read_from_their_own_offset) {
   NN_TEST_FOR_EACH_DEVICE(dev) {
     const nn::Tensor all = nn::Tensor::from_i32({0, 1, 2, 3, 4, 5}, dev);
-    const nn::Tensor tail = all.slice(0, 2, 3);          // {2, 3, 4}
+    const nn::Tensor tail = all.slice_view(0, 2, 3);          // {2, 3, 4}
 
-    const nn::Tensor packed = tail.contiguous().to(nn::Device::CPU);
+    const nn::Tensor packed = tail.pack().to(nn::Device::CPU);
     NN_CHECK(packed.host_data_i32()[0] == 2);
     NN_CHECK(packed.host_data_i32()[1] == 3);
     NN_CHECK(packed.host_data_i32()[2] == 4);
@@ -480,7 +480,7 @@ NN_TEST(i32_views_read_from_their_own_offset) {
 NN_TEST(contiguous_views_with_an_offset_copy_from_their_own_start) {
   NN_TEST_FOR_EACH_DEVICE(dev) {
     const nn::Tensor all = ramp(nn::Shape({6, 2}), dev, 0.0f, 1.0f);
-    const nn::Tensor tail = all.slice(0, 3, 2);     // rows 3 and 4
+    const nn::Tensor tail = all.slice_view(0, 3, 2);     // rows 3 and 4
     NN_CHECK(tail.is_contiguous());
     NN_CHECK(tail.offset() == 6);
 
@@ -508,7 +508,7 @@ NN_TEST(cat_joins_and_splits_back_apart) {
     for (size_t i = 0; i < want.size(); ++i) NN_CHECK(h[i] == want[i]);
 
     // slicing the pieces back out is the inverse
-    const std::vector<float> back = host_of(joined.slice(1, 3, 2));
+    const std::vector<float> back = host_of(joined.slice_view(1, 3, 2));
     const std::vector<float> hb = host_of(b);
     for (size_t i = 0; i < hb.size(); ++i) NN_CHECK(back[i] == hb[i]);
 

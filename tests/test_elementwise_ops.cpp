@@ -57,7 +57,7 @@ const std::vector<float> kWideB{2.0f, 0.0f, 3.5f, -1.0f, 1e-3f,
                                 -0.25f, 12.0f, -3.5f, 0.25f, -1e-3f};
 
 std::vector<float> host_of(const nn::Tensor& t) {
-  const nn::Tensor h = t.contiguous().to(nn::Device::CPU);
+  const nn::Tensor h = t.pack().to(nn::Device::CPU);
   return std::vector<float>(h.host_data(), h.host_data() + h.numel());
 }
 
@@ -296,9 +296,9 @@ NN_TEST(elementwise_absorbs_strides) {
     std::vector<float> raw(28);
     for (size_t i = 0; i < raw.size(); ++i) raw[i] = 0.3f + 0.11f * float(i);
     const nn::Tensor wide = nn::Tensor::from(raw, nn::Shape({4, 7}), dev);
-    const nn::Tensor view = wide.slice(1, 1, 4);
+    const nn::Tensor view = wide.slice_view(1, 1, 4);
     NN_CHECK(!view.is_contiguous());
-    const nn::Tensor dense = view.contiguous();
+    const nn::Tensor dense = view.pack();
 
     for (const UnaryCase& c : kUnaryOps) {
       const std::vector<float> a = host_of(nn::ops::unary(c.op, view));
@@ -312,11 +312,11 @@ NN_TEST(elementwise_absorbs_strides) {
     }
     // A transposed second operand as well, so the two views differ from each
     // other and not only from the dense layout.
-    const nn::Tensor other = wide.slice(1, 2, 4);
+    const nn::Tensor other = wide.slice_view(1, 2, 4);
     for (const BinaryCase& c : kBinaryOps) {
       const std::vector<float> a = host_of(nn::ops::binary(c.op, view, other));
       const std::vector<float> b =
-          host_of(nn::ops::binary(c.op, dense, other.contiguous()));
+          host_of(nn::ops::binary(c.op, dense, other.pack()));
       for (size_t i = 0; i < a.size(); ++i) check_agrees(a[i], b[i], c.name, int(i));
     }
   }
@@ -330,7 +330,7 @@ NN_TEST(view_of_collapses_contiguous_axes) {
   NN_CHECK(v.shape[0] == 120 && v.stride[0] == 1);
 
   // A row stride survives as a second axis; the inner run still merges.
-  const nn::Tensor rows = nn::Tensor::zeros({4, 5, 8}, nn::Device::CPU).slice(2, 0, 6);
+  const nn::Tensor rows = nn::Tensor::zeros({4, 5, 8}, nn::Device::CPU).slice_view(2, 0, 6);
   const nn::TensorView vr = nn::view_of(rows);
   NN_CHECK(vr.rank == 2);
   NN_CHECK(vr.shape[0] == 20 && vr.stride[0] == 8);
@@ -343,7 +343,7 @@ NN_TEST(view_of_collapses_contiguous_axes) {
   // A broadcast axis merges with its neighbour only when that one is also
   // stride 0, which keeps every index pointing at the same element either way.
   const nn::Tensor stretched =
-      nn::Tensor::zeros({4}, nn::Device::CPU).expand(nn::Shape({2, 3, 4}));
+      nn::Tensor::zeros({4}, nn::Device::CPU).expand_view(nn::Shape({2, 3, 4}));
   const nn::TensorView vs = nn::view_of(stretched);
   NN_CHECK(vs.rank == 2);
   NN_CHECK(vs.shape[0] == 6 && vs.stride[0] == 0);

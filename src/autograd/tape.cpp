@@ -103,6 +103,8 @@ void Tape::backward(const Tensor& loss, bool retain_graph) {
     throw std::invalid_argument("loss tensor is not tracked by this tape");
   }
 
+  NoGradScope no_grad;
+
   grads_.assign(nodes_.size(), Tensor{});
   grads_[loss.meta()->node_id] = Tensor::scalar(1.0f, loss.device(), loss.dtype());
 
@@ -131,7 +133,7 @@ void Tape::backward(const Tensor& loss, bool retain_graph) {
           continue;
         }
         if (!grads_[input_id].defined()) {
-          grads_[input_id] = g_in[k].contiguous();
+          grads_[input_id] = g_in[k].pack();
         }
         else {
           nn::ops::add_inplace(grads_[input_id], g_in[k]);

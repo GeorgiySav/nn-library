@@ -91,7 +91,7 @@ namespace {
 Tensor as_matrix(const Tensor& t) {
   const int r = t.shape().rank();
   const int last = t.shape().dim(r - 1);
-  return t.reshape(Shape({int(t.numel() / last), last}));
+  return t.reshape_view(Shape({int(t.numel() / last), last}));
 }
 
 }  // namespace
@@ -159,7 +159,7 @@ Tensor embedding(const Tensor& weight, const Tensor& idx) {
 Tensor contiguous(const Tensor& x) {
   if (x.is_contiguous()) return x;
 
-  Tensor out = x.contiguous();
+  Tensor out = x.pack();
   record_op(out, "contiguous",
     [](const Tensor& g, std::span<Tensor> g_in) {
       g_in[0] = g;
@@ -169,22 +169,31 @@ Tensor contiguous(const Tensor& x) {
 }
 
 Tensor permute(const Tensor& x, std::span<const int> order) {
-  Tensor out = x.permute(order);
-
-  if (Tape* tape = active_tape(); tape && x.requires_grad()) {
-    // inverse[order[i]] = i
-    SmallVec<int, 8> inv(order.size());
-    for (int i{0}; i < int(order.size()); ++i) inv[order[i]] = i;
-
-    const int id = tape->record(
-      [inv](const Tensor& g_out, std::span<Tensor> g_in) mutable {
-        g_in[0] = g_out.permute(inv.span());
-      },
-      {tape->node_for(x)},
-      "permute"
-    );
-    tape->set_producer(out, id);
+  const int r = x.shape().rank();
+  if (int(order.size()) != r) {
+    throw std::invalid_argument("permute: " + std::to_string(order.size()) +
+                                " axes given for rank " + std::to_string(r));
   }
+
+  // inverse[order[i]] = i
+  SmallVec<int, kMaxShapeRank> inv(order.size());
+  bool seen[kMaxShapeRank] = {false};
+  for (int i{0}; i < r; ++i) {
+    const int src = order[i];
+    if (src < 0 || src >= r || seen[src]) {
+      throw std::invalid_argument("permute: axis " + std::to_string(src) +
+                                  " is out of range or repeated");
+    }
+    seen[src] = true;
+    inv[src] = i;
+  }
+
+  Tensor out = x.permute_view(order);
+
+  record_op(out, "permute",
+    [inv](const Tensor& g, std::span<Tensor> g_in) mutable {
+      g_in[0] = g.permute_view(inv.span());
+    }, x);
 
   return out;
 }
@@ -201,42 +210,48 @@ Tensor transpose(const Tensor& x, int a, int b) {
   return permute(x, std::span<const int>(order, r));
 }
 
-Tensor reshape(const Tensor& x, std::span<const int> shape) {
-  Tensor out = x.reshape(shape);
-
-  if (Tape* tape = active_tape(); tape && x.requires_grad()) {
-    const int id = tape->record(
-      [x](const Tensor& g_out, std::span<Tensor> g_in) {
-        g_in[0] = g_out.reshape(x.shape());
-      },
-      {tape->node_for(x)},
-      "reshape"
-    );
-    tape->set_producer(out, id);
+Tensor reshape(const Tensor& x, const Shape& shape) {
+  if (shape.numel() != x.numel()) {
+    throw std::invalid_argument("reshape: " + x.shape().str() + " -> " + shape.str() +
+                                " changes the element count");
   }
+
+  Tensor out = x.reshape_view(shape);
+
+  record_op(out, "reshape",
+    [sx = x.shape()](const Tensor& g, std::span<Tensor> g_in) {
+      g_in[0] = g.is_contiguous() ? g.reshape_view(sx) : g.pack().reshape_view(sx);
+    }, x);
 
   return out;
 }
 
 Tensor slice(const Tensor& x, int axis, int64_t start, int64_t len) {
-  Tensor out = x.slice(axis, start, len);
+  const int a = ops::normalise_dim(axis, x.shape().rank(), "slice");
+  Tensor out = x.slice_view(a, start, len);
 
-  if (Tape* tape = active_tape(); tape && x.requires_grad()) {
-    const int id = tape->record(
-      [x, axis, start, len](const Tensor& g_out, std::span<Tensor> g_in) {
-        // Zero everywhere the slice did not reach, g_out inside the window.
-        // The window is a view sharing storage with g, so unpack writes
-        // through its strides into g.
-        Tensor g = Tensor::zeros(x.shape(), x.device(), x.dtype());
-        Tensor window = g.slice(axis, start, len);
-        ops::unpack(window, g_out);
-        g_in[0] = std::move(g);
-      },
-      {tape->node_for(x)},
-      "slice"
-    );
-    tape->set_producer(out, id);
-  }
+  record_op(out, "slice",
+    [sx = x.shape(), dev = x.device(), dt = x.dtype(), a, start, len]
+    (const Tensor& g_out, std::span<Tensor> g_in) {
+      // Zero everywhere the slice did not reach, g_out inside the window.
+      // The window is a view sharing storage with g, so unpack writes
+      // through its strides into g.
+      Tensor g = Tensor::zeros(sx, dev, dt);
+      Tensor window = g.slice_view(a, start, len);
+      ops::unpack(window, g_out);
+      g_in[0] = std::move(g);
+    }, x);
+
+  return out;
+}
+
+Tensor expand(const Tensor& x, const Shape& to) {
+  Tensor out = x.expand_view(to);
+
+  record_op(out, "expand",
+    [sx = x.shape()](const Tensor& g, std::span<Tensor> g_in) {
+      g_in[0] = ops::sum_to(g, sx);
+    }, x);
 
   return out;
 }
@@ -268,7 +283,7 @@ Tensor sum(const Tensor& x, int dim, bool keepdim) {
     [sx = x.shape(), d, keepdim](const Tensor& g, std::span<Tensor> g_in) {
       Shape kept = sx;
       kept.set_dim(d, 1);
-      g_in[0] = (keepdim ? g : g.reshape(kept)).expand(sx);
+      g_in[0] = (keepdim ? g : g.reshape_view(kept)).expand_view(sx);
     }, x);
 
   return out;
@@ -352,7 +367,7 @@ Tensor cat(std::span<const Tensor> parts, int dim) {
   int64_t offset = 0;
   for (const Tensor& p : parts) {
     const int64_t len = p.shape().dim(d);
-    Tensor window = out.slice(d, offset, len);
+    Tensor window = out.slice_view(d, offset, len);
     ops::unpack(window, p);
     starts.push_back(offset);
     offset += len;
@@ -376,7 +391,7 @@ Tensor cat(std::span<const Tensor> parts, int dim) {
   tape->set_producer(out, tape->record(
       [d, starts, lens](const Tensor& g, std::span<Tensor> g_in) mutable {
         for (int i = 0; i < starts.size(); ++i) {
-          g_in[i] = g.slice(d, starts[i], lens[i]);
+          g_in[i] = g.slice_view(d, starts[i], lens[i]);
         }
       },
       ids, "cat"));
@@ -413,6 +428,20 @@ namespace nn {
   Tensor Tensor::method(float k) const { return autograd::scalar(kernels::ScalarOp::Name, *this, k); }
 #include <nn/kernels/scalar_ops.def>
 #undef NN_SCALAR
+
+Tensor Tensor::contiguous() const { return autograd::contiguous(*this); }
+Tensor Tensor::expand(const Shape& to) const { return autograd::expand(*this, to); }
+Tensor Tensor::permute(std::span<const int> order) const {
+  return autograd::permute(*this, order);
+}
+Tensor Tensor::permute(std::initializer_list<int> order) const {
+  return autograd::permute(*this, std::span<const int>(order.begin(), order.size()));
+}
+Tensor Tensor::transpose(int a, int b) const { return autograd::transpose(*this, a, b); }
+Tensor Tensor::reshape(Shape s) const { return autograd::reshape(*this, s); }
+Tensor Tensor::slice(int axis, int64_t start, int64_t len) const {
+  return autograd::slice(*this, axis, start, len);
+}
 
 Tensor Tensor::pow(float e) const { return pow_scalar(e); }
 Tensor Tensor::mm(const Tensor& other) const { return autograd::matmul(*this, other); }

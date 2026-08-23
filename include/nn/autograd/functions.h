@@ -25,10 +25,11 @@ Tensor matmul(const Tensor& x, const Tensor& w); // [M, K] @ [K, N] -> [M, N]
 Tensor cross_entropy(const Tensor& logits, const Tensor& labels); // rank 0
 
 Tensor contiguous(const Tensor& x);   // differentiable pack; identity backward
-Tensor permute(const Tensor& x, std::span<const int> order);
+Tensor  permute(const Tensor& x, std::span<const int> order);
 Tensor transpose(const Tensor& x, int a, int b);
-Tensor reshape(const Tensor& x, std::span<const int> shape);
-Tensor   slice(const Tensor& x, int axis, int64_t start, int64_t len);
+Tensor  reshape(const Tensor& x, const Shape& shape);
+Tensor    slice(const Tensor& x, int axis, int64_t start, int64_t len);
+Tensor   expand(const Tensor& x, const Shape& to);
 
 Tensor sum_all(const Tensor& x);
 Tensor sum(const Tensor& x, int dim, bool keepdim = false);
@@ -57,6 +58,11 @@ namespace nn {
 // non-differentiable kernels keep their own names under nn::ops.
 using autograd::cat;
 using autograd::contiguous;
+using autograd::expand;
+using autograd::permute;
+using autograd::reshape;
+using autograd::slice;
+using autograd::transpose;
 using autograd::cross_entropy;
 using autograd::layer_norm;
 using autograd::masked_fill;

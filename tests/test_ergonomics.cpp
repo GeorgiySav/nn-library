@@ -15,7 +15,7 @@
 namespace {
 
 std::vector<float> host_of(const nn::Tensor& t) {
-  const nn::Tensor h = t.contiguous().to(nn::Device::CPU);
+  const nn::Tensor h = t.pack().to(nn::Device::CPU);
   return std::vector<float>(h.host_data(), h.host_data() + h.numel());
 }
 
@@ -108,7 +108,7 @@ NN_TEST(methods_chain_left_to_right) {
     // t() swaps the last two axes and is a view, not a copy
     const nn::Tensor xt = x.t();
     NN_CHECK(xt.shape() == nn::Shape({6, 4}));
-    same_values(xt.contiguous(), x.transpose(0, 1).contiguous());
+    same_values(xt.pack(), x.transpose(0, 1).pack());
   }
 }
 

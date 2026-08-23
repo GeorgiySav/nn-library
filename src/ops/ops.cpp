@@ -25,7 +25,7 @@ int64_t row_stride_of(const Tensor& t, const char* op) {
   }
   if (t.stride(r - 1) != 1) {
     throw std::invalid_argument(std::string(op) +
-        ": innermost axis must be contiguous (call .contiguous() first)");
+        ": innermost axis must be contiguous (call .pack() first)");
   }
   return t.stride(r - 2);
 }
@@ -117,7 +117,7 @@ GemmOperand gemm_operand(const Tensor& expanded, const Shape& own_batch,
   }
 
   if (own_batch != batch) {
-    const Tensor dense = expanded.contiguous();
+    const Tensor dense = expanded.pack();
     const int dr = dense.shape().rank();
     return {dense, dense.shape().dim(dr - 1),
             int64_t(dense.shape().dim(dr - 2)) * dense.shape().dim(dr - 1)};
@@ -125,11 +125,11 @@ GemmOperand gemm_operand(const Tensor& expanded, const Shape& own_batch,
 
   if (!rows_ok) {
     throw std::invalid_argument(std::string(op) +
-        ": innermost axis must be contiguous (call .contiguous() first)");
+        ": innermost axis must be contiguous (call .pack() first)");
   }
   throw std::invalid_argument(std::string(op) + ": the batch axes of " +
       expanded.shape().str() + " are not evenly spaced, so the matrices cannot "
-      "be reached by one stride (call .contiguous() first)");
+      "be reached by one stride (call .pack() first)");
 }
 
 Rows rows_of(const Tensor& x) {
@@ -143,7 +143,7 @@ Rows rows_of(const Tensor& x) {
   if (v.rank == 2 && v.shape[1] == N && v.stride[1] == 1) {
     return {x, M, N, v.stride[0]};
   }
-  return {x.contiguous(), M, N, N};
+  return {x.pack(), M, N, N};
 }
 }
 
@@ -185,7 +185,7 @@ Tensor matmul(const Tensor& a, const Tensor& b, bool transA, bool transB) {
     if (!foldable_rows(a, rows, row_stride)) {
       throw std::invalid_argument("matmul (A): " + a.shape().str() +
           " cannot be folded into a matrix, its rows are not evenly spaced "
-          "(call .contiguous() first)");
+          "(call .pack() first)");
     }
     Shape out_shape = a.shape();
     out_shape.set_dim(ar - 1, N);
@@ -203,8 +203,8 @@ Tensor matmul(const Tensor& a, const Tensor& b, bool transA, bool transB) {
     throw std::invalid_argument("matmul: batch " + batch.str() + " is too large");
   }
 
-  const Tensor ea = a.expand(with_core(batch, a.shape().dim(ar - 2), a.shape().dim(ar - 1)));
-  const Tensor eb = b.expand(with_core(batch, b.shape().dim(br - 2), b.shape().dim(br - 1)));
+  const Tensor ea = a.expand_view(with_core(batch, a.shape().dim(ar - 2), a.shape().dim(ar - 1)));
+  const Tensor eb = b.expand_view(with_core(batch, b.shape().dim(br - 2), b.shape().dim(br - 1)));
 
   const GemmOperand oa = gemm_operand(ea, a_batch, batch, nbatch, "matmul (A)");
   const GemmOperand ob = gemm_operand(eb, b_batch, batch, nbatch, "matmul (B)");
@@ -270,8 +270,8 @@ Tensor binary(BinaryOp op, const Tensor& a, const Tensor& b) {
   same_device(a, b, kernels::binary_op_name(op));
 
   const Shape out_shape = broadcast_shapes(a.shape(), b.shape());
-  const Tensor ea = a.expand(out_shape);
-  const Tensor eb = b.expand(out_shape);
+  const Tensor ea = a.expand_view(out_shape);
+  const Tensor eb = b.expand_view(out_shape);
 
   Tensor out(out_shape, a.device(), a.dtype());
   const auto& k = nn::kernels::kernels(a.device());
@@ -295,8 +295,8 @@ Tensor binary_backward(BinaryOp op, int side, const Tensor& a, const Tensor& b,
   }
 
   const Shape bshape = c.shape();
-  const Tensor ea = a.expand(bshape);
-  const Tensor eb = b.expand(bshape);
+  const Tensor ea = a.expand_view(bshape);
+  const Tensor eb = b.expand_view(bshape);
 
   Tensor full(bshape, c.device(), c.dtype());
   const auto& k = nn::kernels::kernels(c.device());
@@ -397,7 +397,7 @@ Tensor sum_dim(const Tensor& x, int dim, bool keepdim) {
   for (int i = 0; i < r; ++i) {
     if (i != d) dims[n++] = x.shape().dim(i);
   }
-  return out.reshape(Shape(std::span<const int>(dims, n)));
+  return out.reshape_view(Shape(std::span<const int>(dims, n)));
 }
 
 Tensor mean_dim(const Tensor& x, int dim, bool keepdim) {
@@ -461,7 +461,7 @@ Tensor embedding(const Tensor& weight, const Tensor& idx) {
 
   const int V = weight.shape().dim(0);
   const int D = weight.shape().dim(1);
-  const Tensor flat_idx = idx.contiguous();
+  const Tensor flat_idx = idx.pack();
 
   int dims[kMaxShapeRank] = {0};
   const int r = idx.shape().rank();
@@ -485,8 +485,8 @@ Tensor embedding_backward(const Tensor& g, const Tensor& idx, int V) {
     throw std::invalid_argument("embedding_backward: gradient does not match the indices");
   }
 
-  const Tensor dense_g = g.contiguous();
-  const Tensor flat_idx = idx.contiguous();
+  const Tensor dense_g = g.pack();
+  const Tensor flat_idx = idx.pack();
 
   Tensor gw = Tensor::zeros(Shape{V, D}, g.device(), g.dtype());
   const auto& k = nn::kernels::kernels(g.device());
@@ -666,7 +666,7 @@ void unpack(Tensor& dst, const Tensor& src) {
     throw std::invalid_argument("unpack: only F32 is supported");
   }
 
-  const Tensor packed = src.contiguous();
+  const Tensor packed = src.pack();
 
   const auto& k = nn::kernels::kernels(dst.device());
   k.unpack(current_stream(dst.device()), packed.device_ptr(),

@@ -17,7 +17,7 @@
 namespace {
 
 std::vector<float> host_of(const nn::Tensor& t) {
-  const nn::Tensor h = t.contiguous().to(nn::Device::CPU);
+  const nn::Tensor h = t.pack().to(nn::Device::CPU);
   return std::vector<float>(h.host_data(), h.host_data() + h.numel());
 }
 
@@ -33,10 +33,10 @@ nn::Tensor spread(nn::Shape s, nn::Device d, int seed) {
 nn::Tensor matrix_at(const nn::Tensor& t, int64_t i) {
   const int r = t.shape().rank();
   const int rows = t.shape().dim(r - 2), cols = t.shape().dim(r - 1);
-  return t.contiguous()
-          .reshape(nn::Shape({int(t.numel() / (int64_t(rows) * cols)), rows, cols}))
-          .slice(0, i, 1)
-          .reshape(nn::Shape({rows, cols}));
+  return t.pack()
+          .reshape_view(nn::Shape({int(t.numel() / (int64_t(rows) * cols)), rows, cols}))
+          .slice_view(0, i, 1)
+          .reshape_view(nn::Shape({rows, cols}));
 }
 
 // Everything but an operand's last two axes, as a list of extents.
@@ -198,7 +198,7 @@ NN_TEST(matmul_folds_a_batched_operand_against_a_plain_weight) {
     NN_CHECK(got.shape() == nn::Shape({B, T, K}));
 
     const nn::Tensor by_hand =
-        nn::ops::matmul(x.reshape(nn::Shape({B * T, C})), w).reshape(nn::Shape({B, T, K}));
+        nn::ops::matmul(x.reshape_view(nn::Shape({B * T, C})), w).reshape_view(nn::Shape({B, T, K}));
 
     const std::vector<float> a = host_of(got), b = host_of(by_hand);
     for (size_t i = 0; i < a.size(); ++i) NN_CHECK_CLOSE(a[i], b[i], 1e-6);
@@ -214,17 +214,17 @@ NN_TEST(matmul_rejects_a_batch_it_cannot_address) {
   NN_TEST_FOR_EACH_DEVICE(dev) {
     const nn::Tensor x = spread(nn::Shape({B, T, H * hd}), dev, 17);
     const int order[4] = {0, 2, 1, 3};
-    const nn::Tensor q = x.reshape(nn::Shape({B, T, H, hd}))
-                          .permute(std::span<const int>(order, 4));
+    const nn::Tensor q = x.reshape_view(nn::Shape({B, T, H, hd}))
+                          .permute_view(std::span<const int>(order, 4));
     NN_CHECK(q.shape() == nn::Shape({B, H, T, hd}));
     NN_CHECK(q.stride(0) != H * q.stride(1));    // the two batch axes do not merge
 
-    const nn::Tensor kt = q.transpose(2, 3);     // [B,H,hd,T]
+    const nn::Tensor kt = q.transpose_view(2, 3);     // [B,H,hd,T]
     NN_CHECK_THROWS(nn::ops::matmul(q, kt), std::invalid_argument);
 
     // One pack fixes it, and then the answer matches the loop.
-    const nn::Tensor qc = q.contiguous();
-    check_against_loop(qc, qc.transpose(2, 3).contiguous(), false, false, "packed");
+    const nn::Tensor qc = q.pack();
+    check_against_loop(qc, qc.transpose_view(2, 3).pack(), false, false, "packed");
   }
 }
 
@@ -264,7 +264,7 @@ NN_TEST(linear_accepts_a_batched_input) {
     NN_CHECK(y.shape() == nn::Shape({B, T, K}));
 
     // the same weights applied to the flattened batch
-    const nn::Tensor flat = fc(x.reshape(nn::Shape({B * T, C})));
+    const nn::Tensor flat = fc(x.reshape_view(nn::Shape({B * T, C})));
     const std::vector<float> a = host_of(y), b = host_of(flat);
     for (size_t i = 0; i < a.size(); ++i) NN_CHECK_CLOSE(a[i], b[i], 1e-6);
   }
@@ -304,7 +304,6 @@ NN_TEST(gradcheck_batched_matmul) {
   }
 }
 
-// The whole point of the exercise: scaled dot-product attention, differentiable.
 NN_TEST(gradcheck_attention) {
   const int B = 2, T = 4, H = 2, hd = 3, C = H * hd;
 
@@ -319,11 +318,8 @@ NN_TEST(gradcheck_attention) {
     wk.set_requires_grad(true);
     wv.set_requires_grad(true);
 
-    const int to_heads[4] = {0, 2, 1, 3};
     auto heads = [&](const nn::Tensor& t) {
-      const int dims[4] = {B, T, H, hd};
-      return nn::contiguous(
-          nn::autograd::permute(nn::autograd::reshape(t, dims), to_heads));
+      return t.reshape(nn::Shape({B, T, H, hd})).permute({0, 2, 1, 3}).contiguous();
     };
 
     auto attention = [&]() {
@@ -332,7 +328,7 @@ NN_TEST(gradcheck_attention) {
       const nn::Tensor v = heads(nn::autograd::matmul(x, wv));
 
       const nn::Tensor scores =
-          nn::autograd::matmul(q, nn::contiguous(nn::autograd::transpose(k, -2, -1))) *
+          nn::autograd::matmul(q, k.t().contiguous()) *
           (1.0f / std::sqrt(float(hd)));
       return nn::autograd::matmul(scores.softmax(), v);          // [B,H,T,hd]
     };

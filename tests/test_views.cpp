@@ -21,8 +21,8 @@ void check_same(const nn::Tensor& got, const nn::Tensor& want, float tol,
     nn::test::report(file, line, std::string(what) + ": shape mismatch");
     return;
   }
-  const nn::Tensor g = got.contiguous().to(nn::Device::CPU);
-  const nn::Tensor w = want.contiguous().to(nn::Device::CPU);
+  const nn::Tensor g = got.pack().to(nn::Device::CPU);
+  const nn::Tensor w = want.pack().to(nn::Device::CPU);
   const int64_t n = g.numel();
   for (int64_t i = 0; i < n; ++i) {
     const float a = g.host_data()[i], b = w.host_data()[i];
@@ -54,7 +54,7 @@ NN_TEST(permute_preserves_rank_and_reorders_dims) {
   NN_TEST_FOR_EACH_DEVICE(dev) {
     const nn::Tensor t = nn::Tensor::zeros({2, 3, 4}, dev);
     const int order[3] = {1, 2, 0};                 // a 3-cycle, not self-inverse
-    const nn::Tensor p = t.permute(std::span<const int>(order, 3));
+    const nn::Tensor p = t.permute_view(std::span<const int>(order, 3));
 
     NN_CHECK(p.shape().rank() == 3);                // rank 0 before the fix
     NN_CHECK(p.shape() == nn::Shape({3, 4, 2}));
@@ -68,11 +68,11 @@ NN_TEST(views_report_contiguity_correctly) {
   NN_TEST_FOR_EACH_DEVICE(dev) {
     const nn::Tensor t = nn::Tensor::zeros({2, 3, 4}, dev);
     NN_CHECK(t.is_contiguous());
-    NN_CHECK(t.slice(0, 0, 1).is_contiguous());     // outer slice: still dense
-    NN_CHECK(!t.slice(2, 1, 2).is_contiguous());    // inner slice: not
-    NN_CHECK(!t.transpose(1, 2).is_contiguous());
-    NN_CHECK(t.transpose(1, 2).transpose(1, 2).is_contiguous());   // back again
-    NN_CHECK(t.transpose(1, 2).contiguous().is_contiguous());
+    NN_CHECK(t.slice_view(0, 0, 1).is_contiguous());     // outer slice: still dense
+    NN_CHECK(!t.slice_view(2, 1, 2).is_contiguous());    // inner slice: not
+    NN_CHECK(!t.transpose_view(1, 2).is_contiguous());
+    NN_CHECK(t.transpose_view(1, 2).transpose_view(1, 2).is_contiguous());   // back again
+    NN_CHECK(t.transpose_view(1, 2).pack().is_contiguous());
   }
 }
 
@@ -86,10 +86,10 @@ NN_TEST(contiguous_materialises_the_right_elements) {
     // [B,T,H,dh] -> [B,H,T,dh]: the attention permute
     const nn::Tensor base = nn::Tensor::from(host, nn::Shape({B, T, H, dh}), dev);
     const int order[4] = {0, 2, 1, 3};
-    const nn::Tensor v = base.permute(std::span<const int>(order, 4));
+    const nn::Tensor v = base.permute_view(std::span<const int>(order, 4));
     NN_CHECK(v.shape() == nn::Shape({B, H, T, dh}));
 
-    const nn::Tensor packed = v.contiguous().to(nn::Device::CPU);
+    const nn::Tensor packed = v.pack().to(nn::Device::CPU);
     NN_CHECK(packed.is_contiguous());
 
     int64_t k = 0;
@@ -109,7 +109,7 @@ NN_TEST(reshape_of_a_non_contiguous_view_copies) {
     for (size_t i = 0; i < host.size(); ++i) host[i] = float(i);
 
     const nn::Tensor t = nn::Tensor::from(host, nn::Shape({2, 3, 4}), dev);
-    const nn::Tensor r = t.transpose(1, 2).reshape(nn::Shape({24}));
+    const nn::Tensor r = t.transpose_view(1, 2).reshape_view(nn::Shape({24}));
 
     NN_CHECK(r.is_contiguous());
     const nn::Tensor h = r.to(nn::Device::CPU);
@@ -128,8 +128,8 @@ NN_TEST(elementwise_ops_agree_on_a_view_and_its_copy) {
     for (size_t i = 0; i < host.size(); ++i) host[i] = float(i) * 0.25f - 5.0f;
     const nn::Tensor base = nn::Tensor::from(host, nn::Shape({6, 8}), dev);
 
-    const nn::Tensor v = base.transpose(0, 1);          // [8,6], strides (1,8)
-    const nn::Tensor c = v.contiguous();
+    const nn::Tensor v = base.transpose_view(0, 1);          // [8,6], strides (1,8)
+    const nn::Tensor c = v.pack();
     NN_CHECK(!v.is_contiguous());
     NN_CHECK(c.is_contiguous());
 
@@ -149,8 +149,8 @@ NN_TEST(relu_on_a_permuted_rank4_view) {
     const nn::Tensor base = nn::Tensor::from(host, nn::Shape({B, T, H, dh}), dev);
 
     const int order[4] = {0, 2, 1, 3};
-    const nn::Tensor v = base.permute(std::span<const int>(order, 4));
-    NN_CHECK_SAME(nn::ops::relu(v), nn::ops::relu(v.contiguous()), 1e-6f);
+    const nn::Tensor v = base.permute_view(std::span<const int>(order, 4));
+    NN_CHECK_SAME(nn::ops::relu(v), nn::ops::relu(v.pack()), 1e-6f);
   }
 }
 
@@ -162,10 +162,10 @@ NN_TEST(row_reductions_absorb_a_row_stride) {
     for (size_t i = 0; i < host.size(); ++i) host[i] = float((i * 13) % 17) - 8.0f;
     const nn::Tensor wide = nn::Tensor::from(host, nn::Shape({M, N + pad}), dev);
 
-    const nn::Tensor x = wide.slice(1, 0, N);
+    const nn::Tensor x = wide.slice_view(1, 0, N);
     NN_CHECK(x.stride(0) == N + pad && x.stride(1) == 1);
     NN_CHECK(!x.is_contiguous());
-    const nn::Tensor packed = x.contiguous();
+    const nn::Tensor packed = x.pack();
 
     NN_CHECK_SAME(nn::ops::argmax_rows(x), nn::ops::argmax_rows(packed), 0.0f);
     NN_CHECK_SAME(nn::ops::softmax_rows(x), nn::ops::softmax_rows(packed), 1e-6f);
@@ -182,8 +182,8 @@ NN_TEST(softmax_ce_absorbs_a_row_stride) {
     std::vector<float> host(size_t(M) * (N + pad));
     for (size_t i = 0; i < host.size(); ++i) host[i] = float((i * 13) % 17) / 17.0f;
     const nn::Tensor wide = nn::Tensor::from(host, nn::Shape({M, N + pad}), dev);
-    const nn::Tensor z = wide.slice(1, 0, N);
-    const nn::Tensor packed = z.contiguous();
+    const nn::Tensor z = wide.slice_view(1, 0, N);
+    const nn::Tensor packed = z.pack();
 
     const nn::Tensor labels = nn::Tensor::from_i32({0, 4, 2, 1, 3, 0, 4}, dev);
 
@@ -207,7 +207,7 @@ NN_TEST(softmax_ce_absorbs_a_row_stride) {
       }
     }
     const nn::Tensor probs_strided =
-        nn::Tensor::from(padded, nn::Shape({M, N + pad}), dev).slice(1, 0, N);
+        nn::Tensor::from(padded, nn::Shape({M, N + pad}), dev).slice_view(1, 0, N);
     NN_CHECK(!probs_strided.is_contiguous());
 
     NN_CHECK_SAME(nn::ops::softmax_ce_backward(probs_strided, labels, g_loss),
@@ -228,13 +228,13 @@ NN_TEST(matmul_absorbs_a_row_stride) {
     const nn::Tensor wide = nn::Tensor::from(hb, nn::Shape({d, T + pad}), dev);
 
     for (int h = 0; h < H; ++h) {
-      const nn::Tensor q = big.slice(1, int64_t(h) * dh, dh);          // [T,dh], lda = d
-      const nn::Tensor r = wide.slice(0, int64_t(h) * dh, dh).slice(1, 0, T);  // [dh,T]
+      const nn::Tensor q = big.slice_view(1, int64_t(h) * dh, dh);          // [T,dh], lda = d
+      const nn::Tensor r = wide.slice_view(0, int64_t(h) * dh, dh).slice_view(1, 0, T);  // [dh,T]
       NN_CHECK(q.stride(0) == d && q.stride(1) == 1 && !q.is_contiguous());
       NN_CHECK(r.stride(0) == T + pad && r.stride(1) == 1 && !r.is_contiguous());
 
-      const nn::Tensor pq = q.contiguous();
-      const nn::Tensor pr = r.contiguous();
+      const nn::Tensor pq = q.pack();
+      const nn::Tensor pr = r.pack();
 
       NN_CHECK_SAME(nn::ops::matmul(q, r,  false, false),
                     nn::ops::matmul(pq, pr, false, false), 1e-4f);
@@ -260,7 +260,7 @@ NN_TEST(matmul_into_writes_only_its_own_columns) {
     const nn::Tensor b = nn::Tensor::from(hb, nn::Shape({dh, dh}), dev);
 
     nn::Tensor wide = nn::Tensor::full({T, d}, -7.0f, dev);
-    nn::Tensor slot = wide.slice(1, int64_t(h) * dh, dh);
+    nn::Tensor slot = wide.slice_view(1, int64_t(h) * dh, dh);
     NN_CHECK(slot.stride(0) == d && slot.stride(1) == 1);
 
     nn::ops::matmul_into(slot, a, b, false, false);     // [T,dh] x [dh,dh]
@@ -279,13 +279,13 @@ NN_TEST(matmul_into_writes_only_its_own_columns) {
 NN_TEST(non_unit_innermost_stride_is_rejected) {
   NN_TEST_FOR_EACH_DEVICE(dev) {
     const nn::Tensor base = nn::Tensor::zeros({8, 8}, dev);
-    const nn::Tensor bad = base.transpose(0, 1);        // innermost stride 8
+    const nn::Tensor bad = base.transpose_view(0, 1);        // innermost stride 8
 
     NN_CHECK_THROWS(nn::ops::argmax_rows(bad), std::invalid_argument);
     NN_CHECK_THROWS(nn::ops::matmul(bad, base, false, false), std::invalid_argument);
     NN_CHECK_THROWS(nn::ops::matmul(base, bad, false, false), std::invalid_argument);
 
-    nn::Tensor dst = base.slice(1, 0, 4);               // non-contiguous destination
+    nn::Tensor dst = base.slice_view(1, 0, 4);               // non-contiguous destination
     NN_CHECK_THROWS(nn::ops::scale_inplace(dst, 2.0f), std::invalid_argument);
     NN_CHECK_THROWS(nn::ops::fill_inplace(dst, 1.0f), std::invalid_argument);
     NN_CHECK_THROWS(nn::ops::add_inplace(dst, dst), std::invalid_argument);
@@ -321,7 +321,7 @@ NN_TEST(sum_all_absorbs_strides) {
 
     // A slice drops columns, so a kernel that ignored strides would read a
     // different set of elements and still return a plausible number.
-    const nn::Tensor v = wide.slice(1, 0, 5);
+    const nn::Tensor v = wide.slice_view(1, 0, 5);
     NN_CHECK(!v.is_contiguous());
 
     float expect = 0.0f;
@@ -330,12 +330,12 @@ NN_TEST(sum_all_absorbs_strides) {
 
     NN_CHECK_CLOSE(nn::ops::sum_all(v).item(), expect, 1e-6f);
     NN_CHECK_CLOSE(nn::ops::sum_all(v).item(),
-                   nn::ops::sum_all(v.contiguous()).item(), 1e-6f);
+                   nn::ops::sum_all(v.pack()).item(), 1e-6f);
 
     // and a 3D permute, so the decode has to get more than one axis right
     const nn::Tensor cube = nn::Tensor::from(host, nn::Shape({2, 4, 7}), dev);
     const int order[3] = {2, 0, 1};
-    const nn::Tensor p = cube.permute(std::span<const int>(order, 3));
+    const nn::Tensor p = cube.permute_view(std::span<const int>(order, 3));
     NN_CHECK_CLOSE(nn::ops::sum_all(p).item(), nn::ops::sum_all(cube).item(), 1e-6f);
   }
 }
@@ -363,7 +363,7 @@ NN_TEST(fill_from_broadcasts_a_device_scalar) {
     }
 
     NN_CHECK_THROWS(nn::ops::fill_from(dst, x), std::invalid_argument);   // not a scalar
-    nn::Tensor view = nn::Tensor::zeros({4, 4}, dev).slice(1, 0, 2);
+    nn::Tensor view = nn::Tensor::zeros({4, 4}, dev).slice_view(1, 0, 2);
     NN_CHECK_THROWS(nn::ops::fill_from(view, total), std::invalid_argument);
   }
 }
@@ -409,27 +409,27 @@ NN_TEST(offset_of_matches_the_full_modulo_form) {
     const nn::Tensor base = nn::Tensor::from(storage, nn::Shape({4096}), dev);
 
     std::vector<nn::Tensor> views;
-    views.push_back(base.slice(0, 7, 100));                        // rank 1, offset
-    views.push_back(base.reshape(nn::Shape({64, 64})).transpose(0, 1));
-    views.push_back(base.reshape(nn::Shape({8, 16, 32})).slice(2, 3, 20));
+    views.push_back(base.slice_view(0, 7, 100));                        // rank 1, offset
+    views.push_back(base.reshape_view(nn::Shape({64, 64})).transpose_view(0, 1));
+    views.push_back(base.reshape_view(nn::Shape({8, 16, 32})).slice_view(2, 3, 20));
     {
       const int order[3] = {2, 0, 1};
-      views.push_back(base.reshape(nn::Shape({8, 16, 32}))
-                          .permute(std::span<const int>(order, 3)));
+      views.push_back(base.reshape_view(nn::Shape({8, 16, 32}))
+                          .permute_view(std::span<const int>(order, 3)));
     }
     {
       const int order[4] = {0, 2, 1, 3};
-      views.push_back(base.reshape(nn::Shape({4, 8, 16, 8}))
-                          .permute(std::span<const int>(order, 4)));
+      views.push_back(base.reshape_view(nn::Shape({4, 8, 16, 8}))
+                          .permute_view(std::span<const int>(order, 4)));
     }
-    views.push_back(base.reshape(nn::Shape({2, 4, 8, 8, 8})).slice(3, 1, 5));
-    views.push_back(base.slice(0, 0, 5).expand(nn::Shape({3, 7, 5})));  // stride 0
-    views.push_back(base.slice(0, 11, 1));                              // single element
+    views.push_back(base.reshape_view(nn::Shape({2, 4, 8, 8, 8})).slice_view(3, 1, 5));
+    views.push_back(base.slice_view(0, 0, 5).expand_view(nn::Shape({3, 7, 5})));  // stride 0
+    views.push_back(base.slice_view(0, 11, 1));                              // single element
 
     for (size_t k = 0; k < views.size(); ++k) {
       const nn::Tensor& v = views[k];
       const std::vector<float> want = gather(v);
-      const nn::Tensor got = v.contiguous().to(nn::Device::CPU);
+      const nn::Tensor got = v.pack().to(nn::Device::CPU);
 
       if (got.numel() != int64_t(want.size())) {
         nn::test::report(__FILE__, __LINE__, "view " + std::to_string(k) + ": wrong size");

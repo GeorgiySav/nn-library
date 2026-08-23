@@ -151,7 +151,7 @@ std::string to_string(const Tensor& t, int edge) {
 
   if (t.numel() == 0) return out + "  (empty)";
 
-  const Tensor h = t.contiguous().to(Device::CPU);
+  const Tensor h = t.pack().to(Device::CPU);
   const bool is_int = (t.dtype() == DType::I32);
 
   const Scan sc = scan(h, is_int);

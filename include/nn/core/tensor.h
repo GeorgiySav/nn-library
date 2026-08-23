@@ -43,15 +43,17 @@ public:
   int64_t stride(int i) const { return strides_.at(i); }
   int64_t offset() const { return offset_; }
 
-  Tensor contiguous() const;
+  // A dense copy of this tensor, or *this when it is already dense
+  Tensor pack() const;
   bool is_contiguous() const;
 
-  Tensor expand(const Shape& to) const;
-
-  Tensor permute(std::span<const int> order) const;
-  Tensor transpose(int a, int b) const;
-  Tensor reshape(Shape s) const;
-  Tensor slice(int axis, int64_t start, int64_t len) const;
+  // raw views
+  Tensor expand_view(const Shape& to) const;
+  Tensor permute_view(std::span<const int> order) const;
+  Tensor permute_view(std::initializer_list<int> order) const;
+  Tensor transpose_view(int a, int b) const;
+  Tensor reshape_view(Shape s) const;
+  Tensor slice_view(int axis, int64_t start, int64_t len) const;
 
   // Address in the owning device's address space. NOT dereferenceable on the
   // host unless device() == Device::CPU. For passing to kernels only.
@@ -105,6 +107,14 @@ public:
 #define NN_SCALAR(Name, method, fwd, bwd) Tensor method(float k) const;
 #include <nn/kernels/scalar_ops.def>
 #undef NN_SCALAR
+
+  Tensor contiguous() const;                 // pack(), plus identity backward
+  Tensor expand(const Shape& to) const;
+  Tensor permute(std::span<const int> order) const;
+  Tensor permute(std::initializer_list<int> order) const;
+  Tensor transpose(int a, int b) const;
+  Tensor reshape(Shape s) const;
+  Tensor slice(int axis, int64_t start, int64_t len) const;
 
   Tensor pow(float e) const;                 // the scalar form, spelled better
   Tensor mm(const Tensor& other) const;      // 2-D matrix product
