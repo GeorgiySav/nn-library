@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cmath>
+#include <functional>
 #include <span>
 #include <stdexcept>
 #include <vector>
@@ -100,17 +101,22 @@ private:
   float lr_;
 };
 
-class Adam : public Optimizer {
+inline bool decay_by_rank(const Tensor& p) { return p.shape().rank() >= 2; }
+
+class AdamW : public Optimizer {
 public:
-  Adam(std::vector<Tensor*> params, float lr, float beta1 = 0.9f, float beta2 = 0.999f, float eps = 1e-8f)
+  AdamW(std::vector<Tensor*> params, float lr, float weight_decay = 0.01f,
+        float beta1 = 0.9f, float beta2 = 0.999f, float eps = 1e-8f,
+        const std::function<bool(const Tensor&)>& should_decay = decay_by_rank)
     : params_(std::move(params)), lr_(lr), beta1_(beta1), beta2_(beta2), eps_(eps) {
     for (Tensor* p : params_) {
       m_.emplace_back(Tensor::zeros(p->shape(), p->device(), p->dtype()));
       v_.emplace_back(Tensor::zeros(p->shape(), p->device(), p->dtype()));
+      wd_.push_back(should_decay(*p) ? weight_decay : 0.0f);
     }
   }
 
-  void step() {
+  void step() override {
     autograd::NoGradScope no_grad;
     step_++;
     for (size_t i{0u}; i < params_.size(); ++i) {
@@ -120,20 +126,33 @@ public:
       if (!m || !m->grad.defined()) continue;
 
       ops::adam(*p, m->grad, m_[i], v_[i],
-                 lr_, beta1_, beta2_, eps_, step_);
+                lr_, beta1_, beta2_, eps_, wd_[i], step_);
     }
   }
 
-  void zero_grad() { for (Tensor* p : params_) p->zero_grad(); }
+  void zero_grad() override { for (Tensor* p : params_) p->zero_grad(); }
+
+  float lr() const { return lr_; }
+  void set_lr(float lr) { lr_ = lr; }
+
+  std::span<const float> weight_decays() const { return wd_; }
 
 private:
   std::vector<Tensor*> params_;
   std::vector<Tensor> m_, v_;
+  std::vector<float> wd_;
   int step_ = 0;
   float lr_;
   float beta1_ = 0.9f;
   float beta2_ = 0.999f;
   float eps_ = 1e-8f;
+};
+
+class Adam : public AdamW {
+public:
+  Adam(std::vector<Tensor*> params, float lr, float beta1 = 0.9f,
+       float beta2 = 0.999f, float eps = 1e-8f)
+    : AdamW(std::move(params), lr, /*weight_decay=*/0.0f, beta1, beta2, eps) {}
 };
 
 

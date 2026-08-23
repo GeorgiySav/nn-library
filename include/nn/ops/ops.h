@@ -61,7 +61,7 @@ Tensor softmax_ce_backward(const Tensor& probs, const Tensor& labels, const Tens
 Tensor argmax_rows(const Tensor& x);
 
 void adam(const Tensor& p, const Tensor& g, Tensor& m, Tensor& v,
-          float lr, float beta1, float beta2, float eps, int step);
+          float lr, float beta1, float beta2, float eps, float weight_decay, int step);
 
 // The two directions between a view and dense storage.
 //   pack:   src may be any layout, dst must be dense -- this is contiguous().

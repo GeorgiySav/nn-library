@@ -609,7 +609,7 @@ Tensor argmax_rows(const Tensor& x) {
 }
 
 void adam(const Tensor& p, const Tensor& g, Tensor& m, Tensor& v,
-          float lr, float beta1, float beta2, float eps, int step) {
+          float lr, float beta1, float beta2, float eps, float weight_decay, int step) {
   same_device(p, g, "adam");
   same_device(p, m, "adam");
   same_device(p, v, "adam");
@@ -623,7 +623,7 @@ void adam(const Tensor& p, const Tensor& g, Tensor& m, Tensor& v,
 
   const auto& k = nn::kernels::kernels(p.device());
   k.adam_step(current_stream(p.device()), p.device_ptr(), g.device_ptr(), m.device_ptr(), v.device_ptr(),
-              lr, beta1, beta2, eps, bc1, bc2, p.numel());
+              lr, beta1, beta2, eps, weight_decay, bc1, bc2, p.numel());
 }
 
 // Gathers src through its strides into dst, which must be dense. Tensor::
