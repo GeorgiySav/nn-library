@@ -3,6 +3,7 @@
 #include <cmath>
 
 #include <nn/core/device.h>
+#include <nn/kernels/random.h>
 
 #include "../strided_index.h"
 
@@ -88,6 +89,15 @@ void naive_adam_step(const Stream&, float* p, const float* g, float* m, float* v
     v[i] = b2 * v[i] + (1.0f - b2) * g[i] * g[i];
     p[i] = p[i] * (1.0f - lr * wd)
          - lr * (m[i] / bc1) / (std::sqrt(v[i] / bc2) + eps);
+  }
+}
+
+void naive_dropout(const Stream&, const float* X, TensorView vx, float* Y,
+                   uint64_t seed, uint64_t offset, float p, float scale,
+                   int64_t n) {
+  for (int64_t i{0}; i < n; ++i) {
+    const float u = random_uniform(seed, offset + uint64_t(i));
+    Y[i] = (u >= p) ? X[offset_of(vx, i)] * scale : 0.0f;
   }
 }
 

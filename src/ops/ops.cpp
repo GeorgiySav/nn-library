@@ -422,6 +422,19 @@ Tensor mean_all(const Tensor& x) {
   return scalar(ScalarOp::MulScalar, sum_all(x), 1.0f / float(n));
 }
 
+Tensor dropout(const Tensor& x, float p, uint64_t seed, uint64_t offset) {
+  if (!(p >= 0.0f && p <= 1.0f)) {
+    throw std::invalid_argument("dropout: p must be in [0, 1]");
+  }
+  const float scale = (p < 1.0f) ? 1.0f / (1.0f - p) : 0.0f;
+
+  Tensor out(x.shape(), x.device(), x.dtype());
+  const auto& k = nn::kernels::kernels(x.device());
+  k.dropout(current_stream(x.device()), x.device_ptr(), view_of(x),
+            out.device_ptr(), seed, offset, p, scale, x.numel());
+  return out;
+}
+
 Tensor softmax_rows(const Tensor& x) {
   const Rows r = rows_of(x);
   Tensor out(x.shape(), x.device(), x.dtype());

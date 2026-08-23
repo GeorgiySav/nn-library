@@ -39,6 +39,8 @@ Tensor sum_dim(const Tensor& x, int dim, bool keepdim);
 Tensor mean_all(const Tensor& x);
 Tensor mean_dim(const Tensor& x, int dim, bool keepdim);
 
+Tensor dropout(const Tensor& x, float p, uint64_t seed, uint64_t offset);
+
 // Softmax over the last axis
 Tensor softmax_rows(const Tensor& x);
 Tensor softmax_rows_backward(const Tensor& y, const Tensor& g);

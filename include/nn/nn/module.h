@@ -3,6 +3,7 @@
 #include <cmath>
 #include <vector>
 #include <memory>
+#include <stdexcept>
 
 #include <nn/core/tensor.h>
 #include <nn/autograd/functions.h>
@@ -27,6 +28,11 @@ public:
 
   void zero_grad() { for (Tensor* p : parameters()) p->zero_grad(); }
 
+  virtual void set_training(bool on) { training_ = on; }
+  void train() { set_training(true); }
+  void eval()  { set_training(false); }
+  bool training() const { return training_; }
+
   void to(Device d) {
     for (Tensor* p : parameters()) {
       const bool rg = p->requires_grad();
@@ -34,6 +40,9 @@ public:
       p->set_requires_grad(rg);
     }
   }
+
+protected:
+  bool training_ = true;
 };
 
 class Linear : public Module {
@@ -125,6 +134,26 @@ private:
   Tensor w_;
 };
 
+class Dropout : public Module {
+public:
+  explicit Dropout(float p = 0.1f) : p_(p) {
+    if (!(p >= 0.0f && p <= 1.0f)) {
+      throw std::invalid_argument("Dropout: p must be in [0, 1]");
+    }
+  }
+
+  Tensor forward(const Tensor& x) override {
+    return autograd::dropout(x, p_, training());
+  }
+
+  void collect_parameters(std::vector<Tensor*>&) override {}
+
+  float p() const { return p_; }
+
+private:
+  float p_;
+};
+
 class Sequential : public Module {
 public:
   Sequential() = default;
@@ -146,6 +175,11 @@ public:
 
   void collect_parameters(std::vector<Tensor*>& out) override {
     for (auto& layer : layers_) layer->collect_parameters(out);
+  }
+
+  void set_training(bool on) override {
+    training_ = on;
+    for (auto& layer : layers_) layer->set_training(on);
   }
 
 private:

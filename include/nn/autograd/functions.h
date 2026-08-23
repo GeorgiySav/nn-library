@@ -40,6 +40,8 @@ Tensor var(const Tensor& x, int dim, bool keepdim = false, bool unbiased = true)
 Tensor stddev(const Tensor& x, int dim, bool keepdim = false, bool unbiased = true);
 
 Tensor softmax(const Tensor& x);                  // over the last axis
+
+Tensor dropout(const Tensor& x, float p, bool training = true);
 Tensor embedding(const Tensor& weight, const Tensor& idx);
 
 Tensor layer_norm(const Tensor& x, const Tensor& weight, const Tensor& bias,
@@ -64,6 +66,7 @@ using autograd::reshape;
 using autograd::slice;
 using autograd::transpose;
 using autograd::cross_entropy;
+using autograd::dropout;
 using autograd::layer_norm;
 using autograd::masked_fill;
 using autograd::softmax;

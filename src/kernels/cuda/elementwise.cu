@@ -3,6 +3,8 @@
 #include "../../cuda_common.h"
 #include "../strided_index.h"
 
+#include <nn/kernels/random.h>
+
 namespace nn::kernels {
 
 namespace {
@@ -120,6 +122,17 @@ __global__ void axpy_kernel(float alpha, const float* X, float* Y, int64_t n) {
   }
 }
 
+__global__ void dropout_kernel(const float* __restrict__ X, TensorView vx,
+                               float* __restrict__ Y, uint64_t seed, uint64_t offset,
+                               float p, float scale, int64_t n) {
+  for (int64_t i = blockIdx.x * int64_t(blockDim.x) + threadIdx.x;
+       i < n;
+       i += int64_t(gridDim.x) * blockDim.x) {
+    const float u = random_uniform(seed, offset + uint64_t(i));
+    Y[i] = (u >= p) ? X[offset_of(vx, i)] * scale : 0.0f;
+  }
+}
+
 __global__ void adam_step_kernel(float* __restrict__ p, const float* __restrict__ g,
                                  float* __restrict__ m, float* __restrict__ v,
                                  float lr, float b1, float b2, float eps, float wd,
@@ -184,6 +197,11 @@ void cuda_fill_from(const Stream& s, const float* src, float* X, int64_t n) {
 void cuda_axpy(const Stream& s, float alpha, const float* X, float* Y, int64_t n) {
   launch_elementwise(s, n, axpy_kernel, alpha, X, Y);
 }
+void cuda_dropout(const Stream& s, const float* X, TensorView vx, float* Y,
+                  uint64_t seed, uint64_t offset, float p, float scale, int64_t n) {
+  launch_elementwise(s, n, dropout_kernel, X, vx, Y, seed, offset, p, scale);
+}
+
 void cuda_adam_step(const Stream& s, float* p, const float* g, float* m, float* v,
                     float lr, float b1, float b2, float eps, float wd,
                     float bc1, float bc2, int64_t n) {

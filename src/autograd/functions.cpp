@@ -134,6 +134,22 @@ Tensor cross_entropy(const Tensor& logits, const Tensor& labels) {
   return loss;
 }
 
+Tensor dropout(const Tensor& x, float p, bool training) {
+  if (!training || p == 0.0f) return x;
+
+  const uint64_t seed = random_seed();
+  const uint64_t offset = reserve_random(x.numel());
+
+  Tensor out = ops::dropout(x, p, seed, offset);
+
+  record_op(out, "dropout",
+    [p, seed, offset](const Tensor& g, std::span<Tensor> g_in) {
+      g_in[0] = ops::dropout(g, p, seed, offset);
+    }, x);
+
+  return out;
+}
+
 Tensor softmax(const Tensor& x) {
   Tensor out = ops::softmax_rows(x);
 

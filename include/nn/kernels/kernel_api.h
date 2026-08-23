@@ -5,6 +5,7 @@
 #include <nn/core/strides.h>
 #include <nn/core/device.h>
 #include <nn/kernels/elementwise_ops.h>
+#include <nn/kernels/random.h>
 
 namespace nn::kernels {
 
@@ -80,6 +81,10 @@ using ScalarBackwardFn    = void(const Stream& s, ScalarOp op, float k,
                                     const float* Y, TensorView vy,
                                     const float* G, TensorView vg,
                                     float* gX, int64_t n);
+
+using DropoutFn           = void(const Stream& s, const float* X, TensorView vx,
+                                    float* Y, uint64_t seed, uint64_t offset,
+                                    float p, float scale, int64_t n);
 
 // Softmax over the last axis
 using SoftmaxRowsFn         = void(const Stream& s, const float* X, float* Y,

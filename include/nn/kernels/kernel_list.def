@@ -38,6 +38,9 @@ NN_KERNEL(axpy,                  AxpyFn)
 NN_KERNEL(fill,                  FillFn)
 NN_KERNEL(fill_from,             FillFromFn)
 
+// dropout
+NN_KERNEL(dropout,               DropoutFn)
+
 // softmax
 NN_KERNEL(softmax_rows,          SoftmaxRowsFn)
 NN_KERNEL(softmax_rows_backward, SoftmaxRowsBackwardFn)

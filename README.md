@@ -28,9 +28,6 @@ cmake --build build-rel --target bench_gemm bench_tape
 
 - Pinned memory
 
-5. AdamW + an LR schedule. Adam has no weight decay and there's no scheduler; warmup is close to mandatory.
-6. Dropout — needs a device-side RNG. Pcg32 is host-only, so this is a new kernel (counter-based, seed+offset, so it stays reproducible).
-
 Needed for a real run
 7. Checkpoint save/load. There is no way to persist a model at all right now.
 8. Token dataset — Dataset is [N, D] float features with targets; an LM wants a token stream sliced into (x, y) shifted windows. And sampling for generation (argmax_rows is rank-2 and greedy-only).

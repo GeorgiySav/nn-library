@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <cmath>
+#include <atomic>
 
 namespace nn {
 
@@ -57,5 +58,29 @@ private:
     state_ = state_ * 6364136223846793005ULL + inc_;
   }
 };
+
+
+// The global counter every stochastic op draws from
+namespace detail {
+inline std::atomic<uint64_t>& rng_seed() {
+  static std::atomic<uint64_t> s{0x853c49e6748fea9bULL};
+  return s;
+}
+inline std::atomic<uint64_t>& rng_counter() {
+  static std::atomic<uint64_t> c{0};
+  return c;
+}
+}  // namespace detail
+
+inline void manual_seed(uint64_t seed) {
+  detail::rng_seed().store(seed);
+  detail::rng_counter().store(0);
+}
+
+inline uint64_t random_seed() { return detail::rng_seed().load(); }
+
+inline uint64_t reserve_random(int64_t n) {
+  return detail::rng_counter().fetch_add(uint64_t(n < 0 ? 0 : n));
+}
 
 }
