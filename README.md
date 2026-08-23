@@ -27,3 +27,19 @@ cmake --build build-rel --target bench_gemm bench_tape
 ## TODOs
 
 - Pinned memory
+
+normalise_dim in Tensor::transpose/permute/slice, so negative axes work everywhere or throw.
+Will bite during training
+4. Gradient clipping by global norm — transformers diverge without it. Needs a sum-of-squares over all parameter grads, which sum_all already gives.
+5. AdamW + an LR schedule. Adam has no weight decay and there's no scheduler; warmup is close to mandatory.
+6. Dropout — needs a device-side RNG. Pcg32 is host-only, so this is a new kernel (counter-based, seed+offset, so it stays reproducible).
+
+Needed for a real run
+7. Checkpoint save/load. There is no way to persist a model at all right now.
+8. Token dataset — Dataset is [N, D] float features with targets; an LM wants a token stream sliced into (x, y) shifted windows. And sampling for generation (argmax_rows is rank-2 and greedy-only).
+
+Convenience, not blocking
+9. arange and a tril_mask helper. Both have host-side workarounds — positions and the causal mask are constants you can upload once — so these are ergonomics.
+
+Worth knowing before it hurts
+10. unary_backward holds x and y, so every elementwise op in the graph pins two activation buffers. On a transformer that's a real memory multiplier, and the [B,T,V] logits are already the largest tensor in the model. The .def records which of x/y each derivative actually needs — that information is there, just not acted on yet

@@ -175,20 +175,20 @@ Tensor permute(const Tensor& x, std::span<const int> order) {
                                 " axes given for rank " + std::to_string(r));
   }
 
-  // inverse[order[i]] = i
-  SmallVec<int, kMaxShapeRank> inv(order.size());
+  SmallVec<int, kMaxShapeRank> axes(order.size()), inv(order.size());
   bool seen[kMaxShapeRank] = {false};
   for (int i{0}; i < r; ++i) {
-    const int src = order[i];
-    if (src < 0 || src >= r || seen[src]) {
+    const int src = ops::normalise_dim(order[i], r, "permute");
+    if (seen[src]) {
       throw std::invalid_argument("permute: axis " + std::to_string(src) +
-                                  " is out of range or repeated");
+                                  " appears twice in the order");
     }
     seen[src] = true;
+    axes[i] = src;
     inv[src] = i;
   }
 
-  Tensor out = x.permute_view(order);
+  Tensor out = x.permute_view(axes.span());
 
   record_op(out, "permute",
     [inv](const Tensor& g, std::span<Tensor> g_in) mutable {

@@ -138,21 +138,27 @@ Tensor Tensor::expand_view(const Shape& to) const {
 }
 
 Tensor Tensor::permute_view(std::span<const int> order) const {
-  assert(int(order.size()) == shape_.rank());
+  const int r = shape_.rank();
+  if (int(order.size()) != r) {
+    throw std::invalid_argument("permute: " + std::to_string(order.size()) +
+                                " axes given for rank " + std::to_string(r));
+  }
 
   Shape new_shape = shape_;
-  Strides new_strides(shape_.rank());
+  Strides new_strides(r);
   bool seen[kMaxShapeRank] = {false};
-  for (int i = 0; i < shape_.rank(); ++i) {
-    const int src = order[i];
-    assert(src >= 0 && src < shape_.rank() && !seen[src] && "invalid permutation");
+  for (int i = 0; i < r; ++i) {
+    const int src = ops::normalise_dim(order[i], r, "permute");
+    if (seen[src]) {
+      throw std::invalid_argument("permute: axis " + std::to_string(src) +
+                                  " appears twice in the order");
+    }
     seen[src] = true;
     new_shape.set_dim(i, shape_.dim(src));
     new_strides.at(i) = strides_.at(src);
   }
 
-  Tensor v = view_like(new_shape, new_strides, offset_);
-  return v;
+  return view_like(new_shape, new_strides, offset_);
 }
 
 Tensor Tensor::permute_view(std::initializer_list<int> order) const {

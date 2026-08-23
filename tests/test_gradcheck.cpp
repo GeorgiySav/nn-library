@@ -293,12 +293,42 @@ NN_TEST(view_axes_are_normalised_and_checked) {
   NN_CHECK(t.transpose(-2, -1).shape() == nn::Shape({2, 4, 3}));
   NN_CHECK(t.slice_view(-1, 1, 2).shape() == nn::Shape({2, 3, 2}));
   NN_CHECK(t.slice(-3, 1, 1).shape() == nn::Shape({1, 3, 4}));
+  NN_CHECK(t.permute_view({-1, 0, -2}).shape() == nn::Shape({4, 2, 3}));
+  NN_CHECK(t.permute({-1, 0, -2}).shape() == nn::Shape({4, 2, 3}));
 
   NN_CHECK_THROWS(t.transpose(0, 3), std::invalid_argument);
   NN_CHECK_THROWS(t.transpose_view(-4, 0), std::invalid_argument);
   NN_CHECK_THROWS(t.slice(1, 2, 3), std::invalid_argument);      // past the end
   NN_CHECK_THROWS(t.slice_view(1, -1, 2), std::invalid_argument);
   NN_CHECK_THROWS(t.reshape(nn::Shape({5, 5})), std::invalid_argument);
-  NN_CHECK_THROWS(t.permute({0, 1}), std::invalid_argument);     // wrong count
-  NN_CHECK_THROWS(t.permute({0, 1, 1}), std::invalid_argument);  // repeated axis
+  NN_CHECK_THROWS(t.permute({0, 1}), std::invalid_argument);       // wrong count
+  NN_CHECK_THROWS(t.permute({0, 1, 1}), std::invalid_argument);    // repeated axis
+  NN_CHECK_THROWS(t.permute({0, 1, -3}), std::invalid_argument);   // -3 is axis 0
+  NN_CHECK_THROWS(t.permute_view({0, 1, 3}), std::invalid_argument);
+  NN_CHECK_THROWS(t.permute_view({0, -4, 1}), std::invalid_argument);
+}
+
+NN_TEST(gradcheck_permute_with_negative_axes) {
+  NN_TEST_FOR_EACH_DEVICE(dev) {
+    nn::Pcg32 rng(34);
+    nn::Tensor x = nn::Tensor::randn({2, 3, 4}, rng, 0.6f, dev);
+    x.set_requires_grad(true);
+
+    const nn::Tensor labels = nn::Tensor::from_i32({0, 3, 1, 2, 0, 3}, dev);
+
+    nn::autograd::Tape tape;
+    nn::Tensor loss;
+    auto forward = [&]() -> float {
+      tape.clear();
+      nn::autograd::TapeScope scope(tape);
+      // {-2, -1, 0} is the same 3-cycle as {1, 2, 0}: [2,3,4] -> [3,4,2]
+      const nn::Tensor p = x.permute({-2, -1, 0});
+      NN_CHECK(p.shape() == nn::Shape({3, 4, 2}));
+      loss = nn::autograd::cross_entropy(p.reshape(nn::Shape({6, 4})), labels);
+      return loss.item();
+    };
+    auto backward = [&]() { tape.backward(loss); };
+
+    NN_CHECK(nn::test::gradCheck(x, forward, backward) < 2e-2f);
+  }
 }
