@@ -2,6 +2,7 @@
 #include "devices.h"
 
 #include <cmath>
+#include <stdexcept>
 #include <vector>
 
 #include <nn/autograd/functions.h>
@@ -246,5 +247,140 @@ NN_TEST(adamw_trains_a_linear_layer) {
     }
 
     NN_CHECK(last < first * 0.1f);
+  }
+}
+
+
+NN_TEST(schedule_warmup_ramps_and_hands_over_without_a_step) {
+  const float peak = 0.4f;
+  nn::optim::Schedule s(peak, /*total=*/10, /*warmup=*/4);
+
+  // step 0 already trains, and the ramp is linear in the step number
+  NN_CHECK_CLOSE(s.at(0), peak * 0.25f, 1e-7f);
+  NN_CHECK_CLOSE(s.at(1), peak * 0.50f, 1e-7f);
+  NN_CHECK_CLOSE(s.at(2), peak * 0.75f, 1e-7f);
+  NN_CHECK_CLOSE(s.at(3), peak, 1e-7f);          // last warmup step is the peak
+  NN_CHECK_CLOSE(s.at(4), peak, 1e-7f);          // decay starts there: no jump
+
+  // no warmup at all is a valid schedule, and starts at the peak
+  nn::optim::Schedule none(peak, 10);
+  NN_CHECK_CLOSE(none.at(0), peak, 1e-7f);
+}
+
+NN_TEST(cosine_hits_its_endpoints_and_midpoint_exactly) {
+  const float peak = 0.001f, floor = 0.0001f;
+  nn::optim::Schedule s(peak, /*total=*/100, /*warmup=*/0,
+                        nn::optim::Decay::Cosine, floor);
+
+  NN_CHECK_CLOSE(s.at(0), peak, 0.0f);                        // cos(0) == 1
+  NN_CHECK_CLOSE(s.at(50), floor + 0.5f * (peak - floor), 1e-9f);
+  NN_CHECK_CLOSE(s.at(100), floor, 0.0f);                     // cos(pi) == -1
+
+  // and it stays at the floor past the end rather than turning back up
+  NN_CHECK_CLOSE(s.at(101), floor, 0.0f);
+  NN_CHECK_CLOSE(s.at(100000), floor, 0.0f);
+
+  // monotone all the way down, and never outside [floor, peak]
+  float prev = s.at(0);
+  for (int64_t i = 1; i <= 100; ++i) {
+    const float now = s.at(i);
+    NN_CHECK(now <= prev);
+    NN_CHECK(now >= floor - 1e-9f && now <= peak + 1e-9f);
+    prev = now;
+  }
+}
+
+NN_TEST(linear_and_constant_decays) {
+  const float peak = 1.0f, floor = 0.2f;
+
+  nn::optim::Schedule lin(peak, 8, 0, nn::optim::Decay::Linear, floor);
+  NN_CHECK_CLOSE(lin.at(0), 1.0f, 1e-7f);
+  NN_CHECK_CLOSE(lin.at(2), 0.8f, 1e-6f);     // 1 - 2/8 of the way from 1 to 0.2
+  NN_CHECK_CLOSE(lin.at(4), 0.6f, 1e-6f);
+  NN_CHECK_CLOSE(lin.at(8), floor, 1e-7f);
+  NN_CHECK_CLOSE(lin.at(20), floor, 1e-7f);
+
+  // constant holds the peak after warmup; min_lr does not apply
+  nn::optim::Schedule flat(peak, 8, 2, nn::optim::Decay::Constant, floor);
+  NN_CHECK_CLOSE(flat.at(0), 0.5f, 1e-7f);    // still warms up
+  NN_CHECK_CLOSE(flat.at(1), 1.0f, 1e-7f);
+  NN_CHECK_CLOSE(flat.at(7), 1.0f, 1e-7f);
+  NN_CHECK_CLOSE(flat.at(99), 1.0f, 1e-7f);
+}
+
+NN_TEST(schedule_rejects_impossible_configurations) {
+  NN_CHECK_THROWS(nn::optim::Schedule(0.1f, 0), std::invalid_argument);
+  NN_CHECK_THROWS(nn::optim::Schedule(0.1f, -5), std::invalid_argument);
+  NN_CHECK_THROWS(nn::optim::Schedule(0.1f, 10, -1), std::invalid_argument);
+  NN_CHECK_THROWS(nn::optim::Schedule(0.1f, 10, 11), std::invalid_argument);
+  // a floor above the peak would make the curve run upwards
+  NN_CHECK_THROWS(nn::optim::Schedule(0.1f, 10, 0, nn::optim::Decay::Cosine, 0.2f),
+                  std::invalid_argument);
+  NN_CHECK_THROWS(nn::optim::Schedule(0.1f, 10, 0, nn::optim::Decay::Cosine, -0.1f),
+                  std::invalid_argument);
+  NN_CHECK_THROWS(nn::optim::Schedule(0.1f, 10).at(-1), std::invalid_argument);
+
+  // warmup covering the whole run is legal: it ramps and never decays
+  nn::optim::Schedule all_warmup(0.1f, 4, 4);
+  NN_CHECK_CLOSE(all_warmup.at(3), 0.1f, 1e-7f);
+  NN_CHECK_CLOSE(all_warmup.at(4), 0.0f, 0.0f);   // past the end, at the floor
+}
+
+NN_TEST(a_schedule_drives_any_optimizer) {
+  NN_TEST_FOR_EACH_DEVICE(dev) {
+    nn::Tensor p = with_grad({1.0f}, dev);
+    nn::optim::SGD sgd({&p}, 0.0f);
+    nn::optim::Schedule sched(0.5f, /*total=*/4, /*warmup=*/2,
+                              nn::optim::Decay::Linear);
+
+    // SGD with a unit gradient moves by exactly -lr, so the parameter records
+    // the schedule it was driven with.
+    float want = 1.0f;
+    for (int64_t s = 0; s < 4; ++s) {
+      sgd.set_lr(sched.at(s));
+      NN_CHECK_CLOSE(sgd.lr(), sched.at(s), 0.0f);
+      set_grad(p, {1.0f});
+      sgd.step();
+      want -= sched.at(s);
+    }
+    // 0.25 + 0.5 + 0.5 + 0.25 = 1.5
+    NN_CHECK_CLOSE(want, -0.5f, 1e-6f);
+    NN_CHECK_CLOSE(host_of(p)[0], want, 1e-6f);
+  }
+}
+
+NN_TEST(a_scheduled_run_trains) {
+  NN_TEST_FOR_EACH_DEVICE(dev) {
+    auto train = [&](bool scheduled) {
+      nn::Pcg32 rng(21);
+      nn::Linear fc(4, 3, rng);
+      fc.to(dev);
+
+      const nn::Tensor x = nn::Tensor::from({{0.4f, -0.7f, 1.1f, 0.2f},
+                                             {-0.3f, 0.9f, 0.1f, -1.2f}}, dev);
+      const nn::Tensor labels = nn::Tensor::from_i32({0, 2}, dev);
+
+      const int64_t steps = 40;
+      nn::optim::AdamW opt(fc.parameters(), 0.05f, 0.01f);
+      nn::optim::Schedule sched(0.05f, steps, /*warmup=*/5);
+
+      float loss_v = 0.0f;
+      for (int64_t s = 0; s < steps; ++s) {
+        if (scheduled) opt.set_lr(sched.at(s));
+        // the last executed step is total-1, so the rate is near the floor but
+        // not on it -- the floor is the limit, reached one step past the run
+        if (scheduled && s + 1 == steps) NN_CHECK(opt.lr() < 0.01f * 0.05f);
+        opt.zero_grad();
+        nn::autograd::GradScope grad;
+        nn::Tensor loss = nn::cross_entropy(fc(x), labels);
+        loss_v = loss.item();
+        loss.backward();
+        opt.step();
+      }
+      return loss_v;
+    };
+
+    NN_CHECK(train(false) < 0.1f);
+    NN_CHECK(train(true) < 0.1f);
   }
 }

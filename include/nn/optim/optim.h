@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <functional>
 #include <span>
@@ -75,17 +76,27 @@ inline void clip_grad_value(std::span<Tensor* const> params, float value) {
 
 class Optimizer {
 public:
+  explicit Optimizer(float lr) : lr_(lr) {}
   virtual ~Optimizer() = default;
   virtual void step() = 0;
   virtual void zero_grad() = 0;
+
+  // The learning rate lives here rather than in each subclass so a Schedule
+  // can drive any optimiser. Changing it between steps is the point; nothing
+  // else about the optimiser's state depends on it.
+  float lr() const { return lr_; }
+  void set_lr(float lr) { lr_ = lr; }
+
+protected:
+  float lr_;
 };
 
 class SGD : public Optimizer {
 public:
   SGD(std::vector<Tensor*> params, float lr)
-    : params_(std::move(params)), lr_(lr) {}
+    : Optimizer(lr), params_(std::move(params)) {}
 
-  void step() {
+  void step() override {
     autograd::NoGradScope no_grad;
     for (Tensor* p : params_) {
       AutogradMeta* m = p->meta();
@@ -94,11 +105,10 @@ public:
     }
   }
 
-  void zero_grad() { for (Tensor* p : params_) p->zero_grad(); }
+  void zero_grad() override { for (Tensor* p : params_) p->zero_grad(); }
 
 private:
   std::vector<Tensor*> params_;
-  float lr_;
 };
 
 inline bool decay_by_rank(const Tensor& p) { return p.shape().rank() >= 2; }
@@ -108,7 +118,8 @@ public:
   AdamW(std::vector<Tensor*> params, float lr, float weight_decay = 0.01f,
         float beta1 = 0.9f, float beta2 = 0.999f, float eps = 1e-8f,
         const std::function<bool(const Tensor&)>& should_decay = decay_by_rank)
-    : params_(std::move(params)), lr_(lr), beta1_(beta1), beta2_(beta2), eps_(eps) {
+    : Optimizer(lr), params_(std::move(params)),
+      beta1_(beta1), beta2_(beta2), eps_(eps) {
     for (Tensor* p : params_) {
       m_.emplace_back(Tensor::zeros(p->shape(), p->device(), p->dtype()));
       v_.emplace_back(Tensor::zeros(p->shape(), p->device(), p->dtype()));
@@ -132,9 +143,7 @@ public:
 
   void zero_grad() override { for (Tensor* p : params_) p->zero_grad(); }
 
-  float lr() const { return lr_; }
-  void set_lr(float lr) { lr_ = lr; }
-
+  // The decay each parameter actually got, in the order they were given.
   std::span<const float> weight_decays() const { return wd_; }
 
 private:
@@ -142,7 +151,6 @@ private:
   std::vector<Tensor> m_, v_;
   std::vector<float> wd_;
   int step_ = 0;
-  float lr_;
   float beta1_ = 0.9f;
   float beta2_ = 0.999f;
   float eps_ = 1e-8f;
@@ -153,6 +161,59 @@ public:
   Adam(std::vector<Tensor*> params, float lr, float beta1 = 0.9f,
        float beta2 = 0.999f, float eps = 1e-8f)
     : AdamW(std::move(params), lr, /*weight_decay=*/0.0f, beta1, beta2, eps) {}
+};
+
+
+enum class Decay { Constant, Linear, Cosine };
+
+//   nn::optim::Schedule sched(3e-4f, /*total=*/10000, /*warmup=*/500);
+//   for (int64_t s = 0; s < 10000; ++s) {
+//     opt.set_lr(sched.at(s));
+//     ...  forward, backward, clip  ...
+//     opt.step();
+//   }
+class Schedule {
+public:
+  Schedule(float peak_lr, int64_t total, int64_t warmup = 0,
+           Decay decay = Decay::Cosine, float min_lr = 0.0f)
+    : peak_(peak_lr), min_(min_lr), total_(total), warmup_(warmup), decay_(decay) {
+    if (total <= 0)          throw std::invalid_argument("Schedule: total must be positive");
+    if (warmup < 0)          throw std::invalid_argument("Schedule: warmup cannot be negative");
+    if (warmup > total)      throw std::invalid_argument("Schedule: warmup exceeds total");
+    if (!(peak_lr >= min_lr)) throw std::invalid_argument("Schedule: peak_lr is below min_lr");
+    if (min_lr < 0.0f)       throw std::invalid_argument("Schedule: min_lr cannot be negative");
+  }
+
+  float at(int64_t step) const {
+    if (step < 0) throw std::invalid_argument("Schedule: step cannot be negative");
+
+    if (step < warmup_) {
+      return peak_ * float(step + 1) / float(warmup_);
+    }
+
+    const int64_t span = total_ - warmup_;
+    if (span <= 0) return min_;
+    const float t = std::min(1.0f, float(step - warmup_) / float(span));
+
+    switch (decay_) {
+      case Decay::Constant: return peak_;
+      case Decay::Linear:   return min_ + (peak_ - min_) * (1.0f - t);
+      case Decay::Cosine:   break;
+    }
+    return min_ + 0.5f * (peak_ - min_) * (1.0f + std::cos(3.14159265358979f * t));
+  }
+
+  float operator()(int64_t step) const { return at(step); }
+
+  float peak_lr() const { return peak_; }
+  float min_lr()  const { return min_; }
+  int64_t total() const { return total_; }
+  int64_t warmup() const { return warmup_; }
+
+private:
+  float peak_, min_;
+  int64_t total_, warmup_;
+  Decay decay_;
 };
 
 
