@@ -43,6 +43,18 @@ Tensor matmul(const Tensor& x, const Tensor& w) {
   return out;
 }
 
+Tensor add(const Tensor& a, const Tensor& b) {
+  Tensor out = ops::add(a, b);
+
+  record_op(out, "add",
+    [sa = a.shape(), sb = b.shape()](const Tensor& g, std::span<Tensor> g_in) {
+      g_in[0] = ops::sum_to(g, sa);
+      g_in[1] = ops::sum_to(g, sb);
+    }, a, b);
+
+  return out;
+}
+
 Tensor relu(const Tensor& x) {
   Tensor out = ops::relu(x);
 

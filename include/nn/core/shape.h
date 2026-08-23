@@ -3,6 +3,7 @@
 #include <initializer_list>
 #include <cassert>
 #include <span>
+#include <stdexcept>
 #include <string>
 
 namespace nn {
@@ -76,8 +77,27 @@ public:
   }
 
 private:
+
   int dims_[kMaxShapeRank] = {0};
   int rank_ = 0;
 };
+
+// numpy broadcasting: align from the right, each axis must match or be 1.
+// Missing leading axes on the shorter shape count as 1.
+inline Shape broadcast_shapes(const Shape& a, const Shape& b) {
+  const int r = (a.rank() > b.rank()) ? a.rank() : b.rank();
+  int dims[kMaxShapeRank] = {0};
+  for (int i = 0; i < r; ++i) {
+    const int ia = a.rank() - r + i, ib = b.rank() - r + i;
+    const int da = (ia >= 0) ? a.dim(ia) : 1;
+    const int db = (ib >= 0) ? b.dim(ib) : 1;
+    if (da == db)      dims[i] = da;
+    else if (da == 1)  dims[i] = db;
+    else if (db == 1)  dims[i] = da;
+    else throw std::invalid_argument(
+        "broadcast_shapes: " + a.str() + " and " + b.str() + " are not compatible");
+  }
+  return Shape(std::span<const int>(dims, r));
+}
 
 }

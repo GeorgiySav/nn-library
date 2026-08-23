@@ -11,7 +11,10 @@ Tensor add_row_bias(const Tensor& x, const Tensor& bias);
 Tensor col_sum(const Tensor& x);
 Tensor relu(const Tensor& x);
 Tensor relu_backward(const Tensor& x, const Tensor& g_out);
+// Broadcasts: shapes are aligned from the right, each axis equal or 1.
 Tensor add(const Tensor& a, const Tensor& b);
+// Backward of a broadcast: sum g down to a shape that broadcasts up to it.
+Tensor sum_to(const Tensor& g, const Shape& target);
 
 void   add_inplace(Tensor& a, const Tensor& b);
 void   scale_inplace(Tensor& a, float alpha);

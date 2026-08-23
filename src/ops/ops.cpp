@@ -151,21 +151,62 @@ Tensor relu_backward(const Tensor& x, const Tensor& g_out) {
   return g_x;
 }
 
+// Sum g down to `target`, which must broadcast up to g's shape. This is the
+// backward of every broadcast: an axis that was stretched to feed many
+// outputs collects the gradient from all of them.
+Tensor sum_to(const Tensor& g, const Shape& target) {
+  if (g.shape() == target) return g;
+  if (target.rank() > g.shape().rank()) {
+    throw std::invalid_argument("sum_to: " + target.str() + " has more axes than " +
+                                g.shape().str());
+  }
+
+  const int r = g.shape().rank();
+  const int lead = r - target.rank();
+
+  TensorView keep{}, red{};
+  keep.rank = red.rank = r;
+  int64_t n_out = 1, n_red = 1;
+  for (int i = 0; i < r; ++i) {
+    const int ti = i - lead;
+    const int td = (ti >= 0) ? target.dim(ti) : 1;
+    const int gd = g.shape().dim(i);
+    if (td != gd && td != 1) {
+      throw std::invalid_argument("sum_to: " + g.shape().str() + " does not reduce to " +
+                                  target.str());
+    }
+    const bool reduced = (td == 1 && gd > 1);
+    keep.shape[i]  = td;
+    keep.stride[i] = g.stride(i);
+    red.shape[i]   = reduced ? gd : 1;
+    red.stride[i]  = reduced ? g.stride(i) : 0;
+    n_out *= td;
+    n_red *= red.shape[i];
+  }
+
+  Tensor out(target, g.device(), g.dtype());
+  const auto& kk = nn::kernels::kernels(g.device());
+  kk.sum_to(current_stream(g.device()), g.device_ptr(), keep, red,
+            out.device_ptr(), n_out, n_red);
+  return out;
+}
+
 Tensor add(const Tensor& a, const Tensor& b) {
   same_device(a, b, "add");
 
-  if (a.shape() != b.shape()) {
-    throw std::invalid_argument("Tensors must have the same shape for addition");
-  }
+  const Shape out_shape = broadcast_shapes(a.shape(), b.shape());
+  const Tensor ea = a.expand(out_shape);
+  const Tensor eb = b.expand(out_shape);
 
-  Tensor out(a.shape(), a.device(), a.dtype());
+  Tensor out(out_shape, a.device(), a.dtype());
   const auto& k = nn::kernels::kernels(a.device());
   const Stream& s = current_stream(a.device());
-  if (a.is_contiguous() && b.is_contiguous()) {
-    k.add(s, a.device_ptr(), b.device_ptr(), out.device_ptr(), a.numel());
+  // Equal shapes expand to themselves, so the dense path is unchanged.
+  if (ea.is_contiguous() && eb.is_contiguous()) {
+    k.add(s, ea.device_ptr(), eb.device_ptr(), out.device_ptr(), out.numel());
   } else {
-    k.add_strided(s, a.device_ptr(), view_of(a), b.device_ptr(), view_of(b),
-                  out.device_ptr(), a.numel());
+    k.add_strided(s, ea.device_ptr(), view_of(ea), eb.device_ptr(), view_of(eb),
+                  out.device_ptr(), out.numel());
   }
   return out;
 }

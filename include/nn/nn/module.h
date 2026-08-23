@@ -41,9 +41,8 @@ public:
   }
 
   Tensor forward(const Tensor& x) override {
-    return autograd::add_row_bias(
-      autograd::matmul(x, w_), 
-    b_);
+    // b_ is [out_features]; broadcasting stretches it across the batch.
+    return autograd::add(autograd::matmul(x, w_), b_);
   }
 
   void collect_parameters(std::vector<Tensor*>& out) override {

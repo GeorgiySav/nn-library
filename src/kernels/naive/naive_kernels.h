@@ -38,6 +38,9 @@ void naive_add_strided(const Stream& s, const float* A, TensorView va,
 void naive_adam_step(const Stream& s, float* p, const float* g, float* m, float* v,
                       float lr, float b1, float b2, float eps, float bc1, float bc2, int64_t n);
 
+void naive_sum_to(const Stream& s, const float* g, TensorView keep, TensorView red,
+                  float* out, int64_t n_out, int64_t n_red);
+
 void naive_sum_all(const Stream& s, const float* X, float* out,
                    float* workspace, int64_t n);
 void naive_sum_all_strided(const Stream& s, const float* X, TensorView v,

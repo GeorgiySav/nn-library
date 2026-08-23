@@ -64,6 +64,9 @@ using CopyStridedFn        = void(*)(const Stream& s, const float* src, TensorVi
                                     float* dst, int64_t n);
 using CopyStridedI32Fn     = void(*)(const Stream& s, const int32_t* src, TensorView v,
                                     int32_t* dst, int64_t n);
+using SumToFn              = void(*)(const Stream& s, const float* g,
+                                     TensorView keep, TensorView red,
+                                     float* out, int64_t n_out, int64_t n_red);
 using CopyIntoStridedFn    = void(*)(const Stream& s, const float* src,
                                      float* dst, TensorView vdst, int64_t n);
 
@@ -97,6 +100,7 @@ struct KernelTable {
   CopyStridedFn copy_strided = nullptr;
   CopyStridedI32Fn copy_strided_i32 = nullptr;
   CopyIntoStridedFn copy_into_strided = nullptr;
+  SumToFn sum_to = nullptr;
 
   SumAllFn sum_all = nullptr;
   SumAllStridedFn sum_all_strided = nullptr;

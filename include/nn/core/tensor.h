@@ -46,6 +46,8 @@ public:
   Tensor contiguous() const;
   bool is_contiguous() const;
 
+  Tensor expand(const Shape& to) const;
+
   Tensor permute(std::span<const int> order) const;
   Tensor transpose(int a, int b) const;
   Tensor reshape(Shape s) const;

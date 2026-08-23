@@ -116,6 +116,27 @@ bool Tensor::is_contiguous() const {
   return true;
 }
 
+Tensor Tensor::expand(const Shape& to) const {
+  if (to.rank() < shape_.rank()) {
+    throw std::invalid_argument("expand: " + shape_.str() + " -> " + to.str() +
+                                " would drop axes");
+  }
+
+  const int lead = to.rank() - shape_.rank();   // axes `to` prepends
+  Strides st(to.rank());
+  for (int i = 0; i < to.rank(); ++i) {
+    const int a = i - lead;
+    if (a < 0) { st.at(i) = 0; continue; }             // brand new axis
+    if (shape_.dim(a) == to.dim(i)) { st.at(i) = strides_.at(a); continue; }
+    if (shape_.dim(a) != 1) {
+      throw std::invalid_argument("expand: " + shape_.str() + " -> " + to.str() +
+                                  ": axis is neither equal nor 1");
+    }
+    st.at(i) = 0;                                      // stretched
+  }
+  return view_like(to, st, offset_);
+}
+
 Tensor Tensor::permute(std::span<const int> order) const {
   assert(int(order.size()) == shape_.rank());
 

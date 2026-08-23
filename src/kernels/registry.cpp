@@ -52,6 +52,7 @@ void register_naive_kernels() {
   t.add_row_bias = &naive_add_row_bias;
   t.col_sum = &naive_col_sum;
   t.argmax_rows = &naive_argmax_rows;
+  t.sum_to = &naive_sum_to;
   t.sum_all = &naive_sum_all;
   t.sum_all_strided = &naive_sum_all_strided;
   // elementwise
@@ -86,6 +87,7 @@ void register_cuda_kernels() {
   t.add_row_bias = &cuda_add_row_bias;
   t.col_sum = &cuda_col_sum;
   t.argmax_rows = &cuda_argmax_rows;
+  t.sum_to = &cuda_sum_to;
   t.sum_all = &cuda_sum_all;
   t.sum_all_strided = &cuda_sum_all_strided;
   // elementwise

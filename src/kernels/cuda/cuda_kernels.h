@@ -50,6 +50,9 @@ void cuda_copy_strided_i32(const Stream& s, const int32_t* src, TensorView v,
 void cuda_copy_into_strided(const Stream& s, const float* src,
                             float* dst, TensorView vdst, int64_t n);
 
+void cuda_sum_to(const Stream& s, const float* g, TensorView keep, TensorView red,
+                 float* out, int64_t n_out, int64_t n_red);
+
 void cuda_sum_all(const Stream& s, const float* X, float* out,
                   float* workspace, int64_t n);
 void cuda_sum_all_strided(const Stream& s, const float* X, TensorView v,

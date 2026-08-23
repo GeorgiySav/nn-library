@@ -125,6 +125,30 @@ __global__ void sum_finish_kernel(const float* __restrict__ partials,
 
 }  // namespace
 
+__global__ void sum_to_kernel(const float* __restrict__ g, TensorView keep,
+                              TensorView red, float* __restrict__ out,
+                              int64_t n_out, int64_t n_red) {
+  for (int64_t j = blockIdx.x * int64_t(blockDim.x) + threadIdx.x;
+       j < n_out;
+       j += int64_t(gridDim.x) * blockDim.x) {
+    const int64_t base = offset_of(keep, j);
+    float acc = 0.0f;
+    for (int64_t k = 0; k < n_red; ++k) acc += g[base + offset_of(red, k)];
+    out[j] = acc;
+  }
+}
+
+void cuda_sum_to(const Stream& s, const float* g, TensorView keep, TensorView red,
+                 float* out, int64_t n_out, int64_t n_red) {
+  if (n_out == 0) return;
+  auto stream = static_cast<cudaStream_t>(s.handle);
+  constexpr int block = 256;
+  constexpr int kMaxGrid = 4096;
+  const int grid = int(std::min<int64_t>((n_out + block - 1) / block, kMaxGrid));
+  sum_to_kernel<<<grid, block, 0, stream>>>(g, keep, red, out, n_out, n_red);
+  NN_CUDA_CHECK_LAUNCH(stream);
+}
+
 void cuda_sum_all(const Stream& s, const float* X, float* out,
                   float* workspace, int64_t n) {
   auto stream = static_cast<cudaStream_t>(s.handle);
