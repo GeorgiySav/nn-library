@@ -294,13 +294,8 @@ Tensor sum_all(const Tensor& x) {
   Tensor workspace(Shape{nn::kernels::kSumAllWorkspace}, x.device(), x.dtype());
 
   const auto& k = nn::kernels::kernels(x.device());
-  const Stream& s = current_stream(x.device());
-  if (x.is_contiguous()) {
-    k.sum_all(s, x.device_ptr(), out.device_ptr(), workspace.device_ptr(), x.numel());
-  } else {
-    k.sum_all_strided(s, x.device_ptr(), view_of(x), out.device_ptr(),
-                      workspace.device_ptr(), x.numel());
-  }
+  k.sum_all(current_stream(x.device()), x.device_ptr(), view_of(x),
+            out.device_ptr(), workspace.device_ptr(), x.numel());
   return out;
 }
 
@@ -510,17 +505,19 @@ void adam(const Tensor& p, const Tensor& g, Tensor& m, Tensor& v,
               lr, beta1, beta2, eps, bc1, bc2, p.numel());
 }
 
-void copy_strided(const Tensor& dst, const Tensor& src) {
-  same_device(dst, src, "copy_strided");
+// Gathers src through its strides into dst, which must be dense. Tensor::
+// contiguous() is this and nothing else.
+void pack(const Tensor& dst, const Tensor& src) {
+  same_device(dst, src, "pack");
 
   if (dst.shape() != src.shape()) {
-    throw std::invalid_argument("copy_strided: dst and src must have the same shape");
+    throw std::invalid_argument("pack: dst and src must have the same shape");
   }
   if (dst.dtype() != src.dtype()) {
-    throw std::invalid_argument("copy_strided: dst and src must have the same dtype");
+    throw std::invalid_argument("pack: dst and src must have the same dtype");
   }
   if (!dst.is_contiguous()) {
-    throw std::invalid_argument("copy_strided: dst must be contiguous");
+    throw std::invalid_argument("pack: dst must be contiguous");
   }
 
   const auto& k = nn::kernels::kernels(dst.device());
@@ -529,32 +526,34 @@ void copy_strided(const Tensor& dst, const Tensor& src) {
 
   switch (src.dtype()) {
     case DType::F32:
-      k.copy_strided(s, src.device_ptr(), v, dst.device_ptr(), src.numel());
+      k.pack(s, src.device_ptr(), v, dst.device_ptr(), src.numel());
       break;
     case DType::I32:
-      k.copy_strided_i32(s, src.device_ptr_i32(), v, dst.device_ptr_i32(), src.numel());
+      k.pack_i32(s, src.device_ptr_i32(), v, dst.device_ptr_i32(), src.numel());
       break;
   }
 }
 
-void copy_into(Tensor& dst, const Tensor& src) {
-  same_device(dst, src, "copy_into");
+// Writes src out through dst's strides. dst is usually a window of a larger
+// tensor, so this is the one place a kernel writes to a non-dense destination.
+void unpack(Tensor& dst, const Tensor& src) {
+  same_device(dst, src, "unpack");
 
   if (dst.shape() != src.shape()) {
-    throw std::invalid_argument("copy_into: dst and src must have the same shape");
+    throw std::invalid_argument("unpack: dst and src must have the same shape");
   }
   if (dst.dtype() != src.dtype()) {
-    throw std::invalid_argument("copy_into: dst and src must have the same dtype");
+    throw std::invalid_argument("unpack: dst and src must have the same dtype");
   }
   if (dst.dtype() != DType::F32) {
-    throw std::invalid_argument("copy_into: only F32 is supported");
+    throw std::invalid_argument("unpack: only F32 is supported");
   }
 
   const Tensor packed = src.contiguous();
 
   const auto& k = nn::kernels::kernels(dst.device());
-  k.copy_into_strided(current_stream(dst.device()), packed.device_ptr(),
-                      dst.device_ptr(), view_of(dst), dst.numel());
+  k.unpack(current_stream(dst.device()), packed.device_ptr(),
+           dst.device_ptr(), view_of(dst), dst.numel());
 }
 
 }

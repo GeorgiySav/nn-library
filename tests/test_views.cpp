@@ -387,3 +387,63 @@ NN_TEST(sum_all_backward_fills_and_accumulates) {
     }
   }
 }
+
+NN_TEST(offset_of_matches_the_full_modulo_form) {
+  std::vector<float> storage(4096);
+  for (size_t i = 0; i < storage.size(); ++i) storage[i] = float(i);
+
+  auto gather = [&](const nn::Tensor& v) {
+    std::vector<float> out(size_t(v.numel()));
+    for (int64_t i = 0; i < v.numel(); ++i) {
+      int64_t rem = i, off = v.offset();
+      for (int a = v.shape().rank() - 1; a >= 0; --a) {
+        off += (rem % v.shape().dim(a)) * v.stride(a);
+        rem /= v.shape().dim(a);
+      }
+      out[size_t(i)] = storage[size_t(off)];
+    }
+    return out;
+  };
+
+  NN_TEST_FOR_EACH_DEVICE(dev) {
+    const nn::Tensor base = nn::Tensor::from(storage, nn::Shape({4096}), dev);
+
+    std::vector<nn::Tensor> views;
+    views.push_back(base.slice(0, 7, 100));                        // rank 1, offset
+    views.push_back(base.reshape(nn::Shape({64, 64})).transpose(0, 1));
+    views.push_back(base.reshape(nn::Shape({8, 16, 32})).slice(2, 3, 20));
+    {
+      const int order[3] = {2, 0, 1};
+      views.push_back(base.reshape(nn::Shape({8, 16, 32}))
+                          .permute(std::span<const int>(order, 3)));
+    }
+    {
+      const int order[4] = {0, 2, 1, 3};
+      views.push_back(base.reshape(nn::Shape({4, 8, 16, 8}))
+                          .permute(std::span<const int>(order, 4)));
+    }
+    views.push_back(base.reshape(nn::Shape({2, 4, 8, 8, 8})).slice(3, 1, 5));
+    views.push_back(base.slice(0, 0, 5).expand(nn::Shape({3, 7, 5})));  // stride 0
+    views.push_back(base.slice(0, 11, 1));                              // single element
+
+    for (size_t k = 0; k < views.size(); ++k) {
+      const nn::Tensor& v = views[k];
+      const std::vector<float> want = gather(v);
+      const nn::Tensor got = v.contiguous().to(nn::Device::CPU);
+
+      if (got.numel() != int64_t(want.size())) {
+        nn::test::report(__FILE__, __LINE__, "view " + std::to_string(k) + ": wrong size");
+        continue;
+      }
+      for (size_t i = 0; i < want.size(); ++i) {
+        if (got.host_data()[i] != want[i]) {
+          nn::test::report(__FILE__, __LINE__,
+              "view " + std::to_string(k) + " element " + std::to_string(i) + " of " +
+              std::to_string(want.size()) + ": " + std::to_string(got.host_data()[i]) +
+              " vs " + std::to_string(want[i]));
+          break;
+        }
+      }
+    }
+  }
+}

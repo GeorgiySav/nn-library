@@ -102,7 +102,7 @@ Tensor Tensor::view_like(const Shape& s, const Strides& strides, int64_t offset)
 Tensor Tensor::contiguous() const {
   if (is_contiguous()) return *this;
   Tensor out(shape_, device(), dtype_);
-  ops::copy_strided(out, *this);
+  ops::pack(out, *this);
   return out;
 }
 

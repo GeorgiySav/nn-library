@@ -17,21 +17,15 @@ namespace nn::kernels {
 //   row reductions            the row stride             innermost stride == 1
 //   whole-tensor reductions   all strides                nothing
 //   gather, embedding         nothing                    fully contiguous
-//   scatter (copy_into)       all strides, on the OUTPUT input is dense
+//   scatter (unpack)          all strides, on the OUTPUT input is dense
 //
 // Outputs are otherwise always dense: every non-inplace ops:: function
 // allocates its own output, so it is contiguous by construction and only the
 // reading side needs strides. The in-place ops require contiguity on their
-// destination. copy_into is the one deliberate exception -- writing a result
+// destination. unpack is the one deliberate exception -- writing a result
 // into a window of a larger dense tensor is what the backward of slice is, and
 // it cannot be expressed as a dense output.
 //
-// The elementwise family takes a TensorView unconditionally rather than having
-// a dense sibling per op. view_of collapses adjacent contiguous axes, so a
-// dense tensor arrives as a rank-1 stride-1 view and offset_of costs one
-// modulo; measured, that is within noise of a kernel with no view at all, while
-// a rank-3 view costs 1.23x. Paying for the view is cheaper than maintaining
-// two kernels per op.
 
 using GemmFn              = void(const Stream& s, const float* A, const float* B,
                                     float*C, int M, int N, int K,
@@ -93,21 +87,27 @@ using EmbeddingFn         = void(const Stream& s, const float* W, const int32_t*
 using EmbeddingBackwardFn = void(const Stream& s, const float* G, const int32_t* idx,
                                     float* gW, int64_t n_idx, int D, int V);
 
-using CopyStridedFn        = void(const Stream& s, const float* src, TensorView v,
-                                    float* dst, int64_t n);
-using CopyStridedI32Fn     = void(const Stream& s, const int32_t* src, TensorView v,
-                                    int32_t* dst, int64_t n);
+// pack gathers a strided view into dense storage -- what contiguous() does.
+// unpack is the other direction: a dense buffer written out through the
+// destination's strides, which is what the backward of slice and the forward of
+// cat need. Neither is a "strided variant" of anything; the strides are the
+// whole point, so there is no sibling to pair them with.
+using PackFn               = void(const Stream& s, const float* src, TensorView v,
+                                     float* dst, int64_t n);
+using PackI32Fn            = void(const Stream& s, const int32_t* src, TensorView v,
+                                     int32_t* dst, int64_t n);
+using UnpackFn             = void(const Stream& s, const float* src,
+                                     float* dst, TensorView vdst, int64_t n);
+
 using SumToFn              = void(const Stream& s, const float* g,
                                      TensorView keep, TensorView red,
                                      float* out, int64_t n_out, int64_t n_red);
-using CopyIntoStridedFn    = void(const Stream& s, const float* src,
-                                     float* dst, TensorView vdst, int64_t n);
 
 constexpr int kSumAllWorkspace = 1024;
 
-using SumAllFn             = void(const Stream& s, const float* X, float* out,
-                                     float* workspace, int64_t n);
-using SumAllStridedFn      = void(const Stream& s, const float* X, TensorView v,
+// One kernel for every layout: see strided_index.h for the measurement that
+// retired the dense sibling.
+using SumAllFn             = void(const Stream& s, const float* X, TensorView v,
                                      float* out, float* workspace, int64_t n);
 
 // Slots are pointers to the function types above, generated so that the table

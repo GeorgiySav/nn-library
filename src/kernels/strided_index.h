@@ -15,11 +15,11 @@ namespace nn::kernels {
 // already points at element zero.
 NN_STRIDED_INLINE int64_t offset_of(const TensorView& v, int64_t i) {
   int64_t rem = i, off = 0;
-  for (int a = v.rank - 1; a >= 0; --a) {
+  for (int a = v.rank - 1; a >= 1; --a) {
     off += (rem % v.shape[a]) * v.stride[a];
     rem /= v.shape[a];
   }
-  return off;
+  return (v.rank > 0) ? off + rem * v.stride[0] : off;
 }
 
 }  // namespace nn::kernels

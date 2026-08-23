@@ -61,8 +61,13 @@ Tensor argmax_rows(const Tensor& x);
 void adam(const Tensor& p, const Tensor& g, Tensor& m, Tensor& v,
           float lr, float beta1, float beta2, float eps, int step);
 
-void copy_strided(const Tensor& dst, const Tensor& src);
-void copy_into(Tensor& dst, const Tensor& src);
+// The two directions between a view and dense storage.
+//   pack:   src may be any layout, dst must be dense -- this is contiguous().
+//   unpack: src is read densely, dst may be any layout -- this is a scatter
+//           into a window of a larger tensor, which slice's backward and cat
+//           both need.
+void pack(const Tensor& dst, const Tensor& src);
+void unpack(Tensor& dst, const Tensor& src);
 
 // Resolve a possibly-negative axis index against a rank, the numpy way.
 int normalise_dim(int dim, int rank, const char* op);

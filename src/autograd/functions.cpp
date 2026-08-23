@@ -189,11 +189,11 @@ Tensor slice(const Tensor& x, int axis, int64_t start, int64_t len) {
     const int id = tape->record(
       [x, axis, start, len](const Tensor& g_out, std::span<Tensor> g_in) {
         // Zero everywhere the slice did not reach, g_out inside the window.
-        // The window is a view sharing storage with g, so copy_into writes
+        // The window is a view sharing storage with g, so unpack writes
         // through its strides into g.
         Tensor g = Tensor::zeros(x.shape(), x.device(), x.dtype());
         Tensor window = g.slice(axis, start, len);
-        ops::copy_into(window, g_out);
+        ops::unpack(window, g_out);
         g_in[0] = std::move(g);
       },
       {tape->node_for(x)},
@@ -317,7 +317,7 @@ Tensor cat(std::span<const Tensor> parts, int dim) {
   for (const Tensor& p : parts) {
     const int64_t len = p.shape().dim(d);
     Tensor window = out.slice(d, offset, len);
-    ops::copy_into(window, p);
+    ops::unpack(window, p);
     starts.push_back(offset);
     offset += len;
   }

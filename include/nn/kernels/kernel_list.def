@@ -32,7 +32,6 @@ NN_KERNEL(scalar_backward,       ScalarBackwardFn)
 NN_KERNEL(argmax_rows,           ArgmaxRowsFn)
 NN_KERNEL(sum_to,                SumToFn)
 NN_KERNEL(sum_all,               SumAllFn)
-NN_KERNEL(sum_all_strided,       SumAllStridedFn)
 
 // whole-buffer writes that are not elementwise maps
 NN_KERNEL(axpy,                  AxpyFn)
@@ -52,7 +51,8 @@ NN_KERNEL(embedding_backward,    EmbeddingBackwardFn)
 // optimisers
 NN_KERNEL(adam_step,             AdamStepFn)
 
-// copies
-NN_KERNEL(copy_strided,          CopyStridedFn)
-NN_KERNEL(copy_strided_i32,      CopyStridedI32Fn)
-NN_KERNEL(copy_into_strided,     CopyIntoStridedFn)
+// copies between a strided view and dense storage. pack gathers a view into a
+// dense buffer; unpack scatters a dense buffer out through a view.
+NN_KERNEL(pack,                  PackFn)
+NN_KERNEL(pack_i32,              PackI32Fn)
+NN_KERNEL(unpack,                UnpackFn)
