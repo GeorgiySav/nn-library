@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <stdexcept>
+#include <unordered_map>
 
 #include <nn/ops/ops.h>
 
@@ -9,9 +10,17 @@ namespace nn::autograd {
 
 static thread_local Tape* active_tape_ = nullptr;
 
+// epoch -> tape
+static thread_local std::unordered_map<uint64_t, Tape*> live_tapes_;
+
 static uint64_t next_epoch() {
   static std::atomic<uint64_t> counter{0};
   return ++counter;
+}
+
+Tape* Tape::by_epoch(uint64_t epoch) {
+  const auto it = live_tapes_.find(epoch);
+  return (it == live_tapes_.end()) ? nullptr : it->second;
 }
 
 TapeScope::TapeScope(Tape& t) {
@@ -43,8 +52,12 @@ bool grad_enabled() {
   return active_tape_ != nullptr;
 }
 
-Tape::Tape() : epoch_(next_epoch()) {}
-Tape::~Tape() { clear(); }
+Tape::Tape() : epoch_(next_epoch()) { live_tapes_[epoch_] = this; }
+
+Tape::~Tape() {
+  clear();
+  live_tapes_.erase(epoch_);
+}
 
 int Tape::node_for(const Tensor& t) {
   AutogradMeta* m = t.meta();
@@ -139,7 +152,10 @@ void Tape::clear() {
   nodes_.clear();
   grads_.clear();
   arena_.reset();
+
+  live_tapes_.erase(epoch_);
   epoch_ = next_epoch(); // makes every stamped node_id stale
+  live_tapes_[epoch_] = this;
 }
 
 bool Tape::owns(const AutogradMeta& m) const {
@@ -155,6 +171,31 @@ void Tape::bind(AutogradMeta& m, int id) const {
 
 int Tape::size() const {
   return static_cast<int>(nodes_.size());
+}
+
+}
+
+namespace nn {
+
+// Defined here rather than in tensor.cpp because it is the one place core
+// reaches into autograd, and doing it the other way round would mean tensor.h
+// pulling in the tape.
+void Tensor::backward(bool retain_graph) const {
+  const AutogradMeta* m = meta();
+  if (!m || m->tape_epoch == 0) {
+    throw std::invalid_argument(
+        "backward: this tensor was not produced by a recorded operation "
+        "(no tape was active when it was computed)");
+  }
+
+  autograd::Tape* tape = autograd::Tape::by_epoch(m->tape_epoch);
+  if (!tape) {
+    throw std::invalid_argument(
+        "backward: the tape that produced this tensor has been cleared or "
+        "destroyed; keep the GradScope alive until after backward()");
+  }
+
+  tape->backward(*this, retain_graph);
 }
 
 }

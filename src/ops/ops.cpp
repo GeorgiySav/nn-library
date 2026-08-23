@@ -1,5 +1,6 @@
 #include <nn/ops/ops.h>
 
+#include <cmath>
 #include <stdexcept>
 
 #include <nn/kernels/kernel_api.h>
@@ -35,8 +36,44 @@ void require_contiguous(const Tensor& t, const char* op) {
     throw std::invalid_argument(std::string(op) + ": operand must be contiguous");
   }
 }
+
+void same_shape(const Tensor& a, const Tensor& b, const char* op) {
+  if (a.shape() != b.shape()) {
+    throw std::invalid_argument(std::string(op) + ": " + a.shape().str() + " and " +
+                                b.shape().str() + " must have the same shape");
+  }
 }
 
+struct Rows {
+  Tensor t;         // keeps a materialised copy alive, when one was needed
+  int M = 0;
+  int N = 0;
+  int64_t stride = 0;
+};
+
+Rows rows_of(const Tensor& x) {
+  const int r = x.shape().rank();
+  const int N = (r == 0) ? 1 : x.shape().dim(r - 1);
+  const int M = (N > 0) ? int(x.numel() / N) : 0;
+
+  if (x.is_contiguous()) return {x, M, N, N};
+
+  const TensorView v = view_of(x);
+  if (v.rank == 2 && v.shape[1] == N && v.stride[1] == 1) {
+    return {x, M, N, v.stride[0]};
+  }
+  return {x.contiguous(), M, N, N};
+}
+}
+
+int normalise_dim(int dim, int rank, const char* op) {
+  const int d = (dim < 0) ? dim + rank : dim;
+  if (d < 0 || d >= rank) {
+    throw std::invalid_argument(std::string(op) + ": axis " + std::to_string(dim) +
+                                " is out of range for rank " + std::to_string(rank));
+  }
+  return d;
+}
 
 Tensor matmul(const Tensor& a, const Tensor& b, bool transA, bool transB) {
   same_device(a, b, "matmul");
@@ -89,67 +126,105 @@ void matmul_into(Tensor& out, const Tensor& a, const Tensor& b, bool transA, boo
          M, N, K_a, lda, ldb, ldc, transA, transB);
 }
 
-Tensor add_row_bias(const Tensor& x, const Tensor& bias) {
-  same_device(x, bias, "add_row_bias");
-
-  if (x.shape().rank() != 2 || bias.shape().rank() != 1) {
-    throw std::invalid_argument("x must be 2D and bias must be 1D");
-  }
-  if (x.shape().dim(1) != bias.shape().dim(0)) {
-    throw std::invalid_argument("Bias dimension must match x's second dimension");
-  }
-
+Tensor unary(UnaryOp op, const Tensor& x) {
   Tensor out(x.shape(), x.device(), x.dtype());
   const auto& k = nn::kernels::kernels(x.device());
-  k.add_row_bias(current_stream(x.device()), x.device_ptr(), bias.device_ptr(), out.device_ptr(),
-                 x.shape().dim(0), x.shape().dim(1), row_stride_of(x, "add_row_bias"));
+  k.unary(current_stream(x.device()), op, x.device_ptr(), view_of(x),
+          out.device_ptr(), out.numel());
   return out;
 }
 
-Tensor col_sum(const Tensor& x) {
-  if (x.shape().rank() != 2) {
-    throw std::invalid_argument("x must be 2D");
+Tensor unary_backward(UnaryOp op, const Tensor& x, const Tensor& y, const Tensor& g) {
+  same_device(x, g, "unary_backward");
+  same_shape(x, y, kernels::unary_op_name(op));
+  same_shape(x, g, kernels::unary_op_name(op));
+
+  Tensor gx(x.shape(), x.device(), x.dtype());
+  const auto& k = nn::kernels::kernels(x.device());
+  k.unary_backward(current_stream(x.device()), op,
+                   x.device_ptr(), view_of(x),
+                   y.device_ptr(), view_of(y),
+                   g.device_ptr(), view_of(g),
+                   gx.device_ptr(), gx.numel());
+  return gx;
+}
+
+Tensor binary(BinaryOp op, const Tensor& a, const Tensor& b) {
+  same_device(a, b, kernels::binary_op_name(op));
+
+  const Shape out_shape = broadcast_shapes(a.shape(), b.shape());
+  const Tensor ea = a.expand(out_shape);
+  const Tensor eb = b.expand(out_shape);
+
+  Tensor out(out_shape, a.device(), a.dtype());
+  const auto& k = nn::kernels::kernels(a.device());
+  k.binary(current_stream(a.device()), op, ea.device_ptr(), view_of(ea),
+           eb.device_ptr(), view_of(eb), out.device_ptr(), out.numel());
+  return out;
+}
+
+
+Tensor binary_backward(BinaryOp op, int side, const Tensor& a, const Tensor& b,
+                       const Tensor& c, const Tensor& g) {
+  const char* name = kernels::binary_op_name(op);
+  same_shape(c, g, name);
+
+  const Shape& target = (side == 0) ? a.shape() : b.shape();
+  if (op == BinaryOp::Add || (op == BinaryOp::Sub && side == 0)) {
+    return sum_to(g, target);
+  }
+  if (op == BinaryOp::Sub) {
+    return scalar(ScalarOp::MulScalar, sum_to(g, target), -1.0f);
   }
 
-  Tensor out(Shape{x.shape().dim(1)}, x.device(), x.dtype());
-  const auto& k = nn::kernels::kernels(x.device());
-  k.col_sum(current_stream(x.device()), x.device_ptr(), out.device_ptr(),
-            x.shape().dim(0), x.shape().dim(1), row_stride_of(x, "col_sum"));
-  return out;
+  const Shape bshape = c.shape();
+  const Tensor ea = a.expand(bshape);
+  const Tensor eb = b.expand(bshape);
+
+  Tensor full(bshape, c.device(), c.dtype());
+  const auto& k = nn::kernels::kernels(c.device());
+  k.binary_backward(current_stream(c.device()), op, side,
+                    ea.device_ptr(), view_of(ea),
+                    eb.device_ptr(), view_of(eb),
+                    c.device_ptr(), view_of(c),
+                    g.device_ptr(), view_of(g),
+                    full.device_ptr(), full.numel());
+  return sum_to(full, (side == 0) ? a.shape() : b.shape());
 }
 
-Tensor relu(const Tensor& x) {
+Tensor scalar(ScalarOp op, const Tensor& x, float k_value) {
   Tensor out(x.shape(), x.device(), x.dtype());
   const auto& k = nn::kernels::kernels(x.device());
-  const Stream& s = current_stream(x.device());
-  if (x.is_contiguous()) {
-    k.relu(s, x.device_ptr(), out.device_ptr(), x.numel());
-  } else {
-    k.relu_strided(s, x.device_ptr(), view_of(x), out.device_ptr(), x.numel());
-  }
+  k.scalar(current_stream(x.device()), op, k_value, x.device_ptr(), view_of(x),
+           out.device_ptr(), out.numel());
   return out;
 }
+
+Tensor scalar_backward(ScalarOp op, const Tensor& x, const Tensor& y,
+                       const Tensor& g, float k_value) {
+  same_shape(x, y, kernels::scalar_op_name(op));
+  same_shape(x, g, kernels::scalar_op_name(op));
+
+  Tensor gx(x.shape(), x.device(), x.dtype());
+  const auto& k = nn::kernels::kernels(x.device());
+  k.scalar_backward(current_stream(x.device()), op, k_value,
+                    x.device_ptr(), view_of(x),
+                    y.device_ptr(), view_of(y),
+                    g.device_ptr(), view_of(g),
+                    gx.device_ptr(), gx.numel());
+  return gx;
+}
+
+Tensor relu(const Tensor& x) { return unary(UnaryOp::Relu, x); }
 
 Tensor relu_backward(const Tensor& x, const Tensor& g_out) {
   same_device(x, g_out, "relu_backward");
-
-  if (x.shape() != g_out.shape()) {
-    throw std::invalid_argument("x and g_out must have the same shape");
-  }
-
-  Tensor g_x(x.shape(), x.device(), x.dtype());
-  const auto& k = nn::kernels::kernels(x.device());
-  const Stream& s = current_stream(x.device());
-  
-  if (x.is_contiguous() && g_out.is_contiguous()) {
-    k.relu_backward(s, x.device_ptr(), g_out.device_ptr(), g_x.device_ptr(), x.numel());
-  } else {
-    k.relu_backward_strided(s, x.device_ptr(), view_of(x),
-                            g_out.device_ptr(), view_of(g_out),
-                            g_x.device_ptr(), x.numel());
-  }
-  return g_x;
+  same_shape(x, g_out, "relu_backward");
+  return unary_backward(UnaryOp::Relu, x, x, g_out);
 }
+
+Tensor add(const Tensor& a, const Tensor& b) { return binary(BinaryOp::Add, a, b); }
+Tensor mul(const Tensor& a, const Tensor& b) { return binary(BinaryOp::Mul, a, b); }
 
 // Sum g down to `target`, which must broadcast up to g's shape. This is the
 // backward of every broadcast: an axis that was stretched to feed many
@@ -191,52 +266,144 @@ Tensor sum_to(const Tensor& g, const Shape& target) {
   return out;
 }
 
-Tensor add(const Tensor& a, const Tensor& b) {
-  same_device(a, b, "add");
+Tensor sum_dim(const Tensor& x, int dim, bool keepdim) {
+  const int r = x.shape().rank();
+  const int d = normalise_dim(dim, r, "sum");
 
-  const Shape out_shape = broadcast_shapes(a.shape(), b.shape());
-  const Tensor ea = a.expand(out_shape);
-  const Tensor eb = b.expand(out_shape);
+  Shape kept = x.shape();
+  kept.set_dim(d, 1);
+  Tensor out = sum_to(x, kept);
+  if (keepdim) return out;
 
-  Tensor out(out_shape, a.device(), a.dtype());
-  const auto& k = nn::kernels::kernels(a.device());
-  const Stream& s = current_stream(a.device());
-  // Equal shapes expand to themselves, so the dense path is unchanged.
-  if (ea.is_contiguous() && eb.is_contiguous()) {
-    k.add(s, ea.device_ptr(), eb.device_ptr(), out.device_ptr(), out.numel());
+  int dims[kMaxShapeRank] = {0};
+  int n = 0;
+  for (int i = 0; i < r; ++i) {
+    if (i != d) dims[n++] = x.shape().dim(i);
+  }
+  return out.reshape(Shape(std::span<const int>(dims, n)));
+}
+
+Tensor mean_dim(const Tensor& x, int dim, bool keepdim) {
+  const int d = normalise_dim(dim, x.shape().rank(), "mean");
+  const int n = x.shape().dim(d);
+  return scalar(ScalarOp::MulScalar, sum_dim(x, d, keepdim), 1.0f / float(n));
+}
+
+Tensor sum_all(const Tensor& x) {
+  Tensor out(Shape{}, x.device(), x.dtype());
+  Tensor workspace(Shape{nn::kernels::kSumAllWorkspace}, x.device(), x.dtype());
+
+  const auto& k = nn::kernels::kernels(x.device());
+  const Stream& s = current_stream(x.device());
+  if (x.is_contiguous()) {
+    k.sum_all(s, x.device_ptr(), out.device_ptr(), workspace.device_ptr(), x.numel());
   } else {
-    k.add_strided(s, ea.device_ptr(), view_of(ea), eb.device_ptr(), view_of(eb),
-                  out.device_ptr(), out.numel());
+    k.sum_all_strided(s, x.device_ptr(), view_of(x), out.device_ptr(),
+                      workspace.device_ptr(), x.numel());
   }
   return out;
 }
 
+Tensor mean_all(const Tensor& x) {
+  const int64_t n = x.numel();
+  if (n == 0) throw std::invalid_argument("mean: empty tensor");
+  return scalar(ScalarOp::MulScalar, sum_all(x), 1.0f / float(n));
+}
+
+Tensor softmax_rows(const Tensor& x) {
+  const Rows r = rows_of(x);
+  Tensor out(x.shape(), x.device(), x.dtype());
+  const auto& k = nn::kernels::kernels(x.device());
+  k.softmax_rows(current_stream(x.device()), r.t.device_ptr(), out.device_ptr(),
+                 r.M, r.N, r.stride);
+  return out;
+}
+
+Tensor softmax_rows_backward(const Tensor& y, const Tensor& g) {
+  same_device(y, g, "softmax_backward");
+  same_shape(y, g, "softmax_backward");
+
+  const Rows ry = rows_of(y);
+  const Rows rg = rows_of(g);
+  Tensor gx(y.shape(), y.device(), y.dtype());
+  const auto& k = nn::kernels::kernels(y.device());
+  k.softmax_rows_backward(current_stream(y.device()), ry.t.device_ptr(),
+                          rg.t.device_ptr(), gx.device_ptr(),
+                          ry.M, ry.N, ry.stride, rg.stride);
+  return gx;
+}
+
+Tensor embedding(const Tensor& weight, const Tensor& idx) {
+  same_device(weight, idx, "embedding");
+
+  if (weight.shape().rank() != 2) {
+    throw std::invalid_argument("embedding: weight must be [V, D]");
+  }
+  if (idx.dtype() != DType::I32) {
+    throw std::invalid_argument("embedding: indices must be I32");
+  }
+  if (idx.shape().rank() + 1 > kMaxShapeRank) {
+    throw std::invalid_argument("embedding: indices have too many axes");
+  }
+  require_contiguous(weight, "embedding (weight)");
+
+  const int V = weight.shape().dim(0);
+  const int D = weight.shape().dim(1);
+  const Tensor flat_idx = idx.contiguous();
+
+  int dims[kMaxShapeRank] = {0};
+  const int r = idx.shape().rank();
+  for (int i = 0; i < r; ++i) dims[i] = idx.shape().dim(i);
+  dims[r] = D;
+
+  Tensor out(Shape(std::span<const int>(dims, r + 1)), weight.device(), weight.dtype());
+  const auto& k = nn::kernels::kernels(weight.device());
+  k.embedding(current_stream(weight.device()), weight.device_ptr(),
+              flat_idx.device_ptr_i32(), out.device_ptr(), idx.numel(), D, V);
+  return out;
+}
+
+Tensor embedding_backward(const Tensor& g, const Tensor& idx, int V) {
+  same_device(g, idx, "embedding_backward");
+
+  const int r = g.shape().rank();
+  if (r < 1) throw std::invalid_argument("embedding_backward: gradient has no axes");
+  const int D = g.shape().dim(r - 1);
+  if (g.numel() != idx.numel() * D) {
+    throw std::invalid_argument("embedding_backward: gradient does not match the indices");
+  }
+
+  const Tensor dense_g = g.contiguous();
+  const Tensor flat_idx = idx.contiguous();
+
+  Tensor gw = Tensor::zeros(Shape{V, D}, g.device(), g.dtype());
+  const auto& k = nn::kernels::kernels(g.device());
+  k.embedding_backward(current_stream(g.device()), dense_g.device_ptr(),
+                       flat_idx.device_ptr_i32(), gw.device_ptr(), idx.numel(), D, V);
+  return gw;
+}
+
 void add_inplace(Tensor& a, const Tensor& b) {
   same_device(a, b, "add_inplace");
-
-  if (a.shape() != b.shape()) {
-    throw std::invalid_argument("Tensors must have the same shape for addition");
-  }
+  same_shape(a, b, "add_inplace");
   require_contiguous(a, "add_inplace (destination)");
-  require_contiguous(b, "add_inplace");
 
   const auto& k = nn::kernels::kernels(a.device());
-  k.add(current_stream(a.device()), a.device_ptr(), b.device_ptr(), a.device_ptr(), a.numel());
+  k.binary(current_stream(a.device()), BinaryOp::Add, a.device_ptr(), view_of(a),
+           b.device_ptr(), view_of(b), a.device_ptr(), a.numel());
 }
 
 void scale_inplace(Tensor& a, float alpha) {
   require_contiguous(a, "scale_inplace");
 
   const auto& k = nn::kernels::kernels(a.device());
-  k.scale(current_stream(a.device()), alpha, a.device_ptr(), a.numel());
+  k.scalar(current_stream(a.device()), ScalarOp::MulScalar, alpha,
+           a.device_ptr(), view_of(a), a.device_ptr(), a.numel());
 }
 
 void axpy_inplace(Tensor& y, float alpha, const Tensor& x) {
   same_device(y, x, "axpy_inplace");
-
-  if (y.shape() != x.shape()) {
-    throw std::invalid_argument("Tensors must have the same shape for axpy");
-  }
+  same_shape(y, x, "axpy_inplace");
   require_contiguous(y, "axpy_inplace (destination)");
   require_contiguous(x, "axpy_inplace");
 
@@ -337,7 +504,7 @@ void adam(const Tensor& p, const Tensor& g, Tensor& m, Tensor& v,
 
   const float bc1 = 1.0f - std::pow(beta1, step);
   const float bc2 = 1.0f - std::pow(beta2, step);
-  
+
   const auto& k = nn::kernels::kernels(p.device());
   k.adam_step(current_stream(p.device()), p.device_ptr(), g.device_ptr(), m.device_ptr(), v.device_ptr(),
               lr, beta1, beta2, eps, bc1, bc2, p.numel());
@@ -388,21 +555,6 @@ void copy_into(Tensor& dst, const Tensor& src) {
   const auto& k = nn::kernels::kernels(dst.device());
   k.copy_into_strided(current_stream(dst.device()), packed.device_ptr(),
                       dst.device_ptr(), view_of(dst), dst.numel());
-}
-
-Tensor sum_all(const Tensor& x) {
-  Tensor out(Shape{}, x.device(), x.dtype());
-  Tensor workspace(Shape{nn::kernels::kSumAllWorkspace}, x.device(), x.dtype());
-
-  const auto& k = nn::kernels::kernels(x.device());
-  const Stream& s = current_stream(x.device());
-  if (x.is_contiguous()) {
-    k.sum_all(s, x.device_ptr(), out.device_ptr(), workspace.device_ptr(), x.numel());
-  } else {
-    k.sum_all_strided(s, x.device_ptr(), view_of(x), out.device_ptr(),
-                      workspace.device_ptr(), x.numel());
-  }
-  return out;
 }
 
 }

@@ -22,7 +22,7 @@ float accuracy(nn::Module& model, nn::data::DataLoader<>& loader) {
   while (loader.has_next()) {
     auto [xb, yb] = loader.next();
     correct += nn::metrics::count_correct(
-                model.forward(xb).to(nn::Device::CPU),
+                model(xb).to(nn::Device::CPU),
                 yb.to(nn::Device::CPU));
     total   += yb.shape().dim(0);
   }
@@ -55,7 +55,6 @@ int main(int argc, char** argv) {
   model.to(device);
 
   nn::optim::Adam opt(model.parameters(), 0.001f);
-  nn::autograd::Tape tape;
 
   std::printf("Training\n");
   for (int epoch{0}; epoch < 10; ++epoch) {
@@ -67,13 +66,9 @@ int main(int argc, char** argv) {
       auto [xb, yb] = loader.next();
       opt.zero_grad();
 
-      nn::Tensor loss;
-      {
-        nn::autograd::TapeScope scope(tape);
-        loss = nn::autograd::cross_entropy(model.forward(xb), yb);
-      }
-
-      tape.backward(loss);
+      nn::autograd::GradScope grad;
+      nn::Tensor loss = nn::cross_entropy(model(xb), yb);
+      loss.backward();
       opt.step();
 
       running += loss.item();

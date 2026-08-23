@@ -186,7 +186,7 @@ float* Tensor::device_ptr() const {
 
 int32_t* Tensor::device_ptr_i32() const {
   assert(dtype_ == DType::I32);
-  return static_cast<int32_t*>(storage_->data());
+  return static_cast<int32_t*>(storage_->data()) + offset_;
 }
 
 float* Tensor::host_data() const {
@@ -207,7 +207,8 @@ void* Tensor::raw() {
 }
 
 const void* Tensor::raw() const {
-  return storage_->data();
+  assert(is_contiguous() && "raw() on a non-contiguous tensor");
+  return static_cast<const char*>(storage_->data()) + offset_ * dtype_size(dtype_);
 }
 
 float Tensor::item() const {
@@ -271,10 +272,19 @@ void Tensor::zero_grad() {
 
 TensorView view_of(const Tensor& t) {
   TensorView v;
-  v.rank = t.shape().rank();
-  for (int i = 0; i < v.rank; ++i) {
-    v.shape[i] = t.shape().dim(i);
-    v.stride[i] = t.stride(i);
+  for (int i = 0; i < t.shape().rank(); ++i) {
+    const int64_t d = t.shape().dim(i);
+    const int64_t s = t.stride(i);
+    if (d == 1) continue;
+    // The previous axis steps exactly one full run of this one.
+    if (v.rank > 0 && v.stride[v.rank - 1] == s * d) {
+      v.shape[v.rank - 1] *= d;
+      v.stride[v.rank - 1] = s;
+      continue;
+    }
+    v.shape[v.rank] = d;
+    v.stride[v.rank] = s;
+    ++v.rank;
   }
   return v;
 }

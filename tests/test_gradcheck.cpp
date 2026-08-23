@@ -35,17 +35,11 @@ NN_TEST(gradcheck_two_layer_mlp) {
       nn::autograd::TapeScope scope(tape);
 
       nn::Tensor h1 = nn::autograd::relu(
-        nn::autograd::add_row_bias(
-          nn::autograd::matmul(x, w1),
-          b1
-        )
+        nn::autograd::add(nn::autograd::matmul(x, w1), b1)
       );
 
       nn::Tensor logits = nn::autograd::relu(
-        nn::autograd::add_row_bias(
-          nn::autograd::matmul(h1, w2),
-          b2
-        )
+        nn::autograd::add(nn::autograd::matmul(h1, w2), b2)
       );
 
       loss = nn::autograd::cross_entropy(logits, labels);

@@ -7,41 +7,47 @@
 //   registry.cpp      both backends' registrations, and the null check
 //
 // That works because every backend function is named <backend>_<slot> and the
-// Fn aliases are function types rather than pointers-to-function, so `ReluFn
-// naive_relu;` declares a function with exactly the signature the table wants.
-// Add a kernel by adding a line here, the alias in kernel_api.h, and the two
-// bodies -- nothing else.
+// Fn aliases are function types rather than pointers-to-function, so a line
+// like `GemmFn naive_gemm;` declares a function with exactly the signature the
+// table wants. Add a kernel by adding a line here, the alias in kernel_api.h,
+// and the two bodies -- nothing else.
+//
+// Elementwise ops are NOT kernels. They are lines in unary_ops.def,
+// binary_ops.def or scalar_ops.def, and ride on the six slots below.
 //
 // NN_KERNEL(slot, FnAlias)
 
 // gemm
 NN_KERNEL(gemm,                  GemmFn)
 
+// elementwise, dispatched on an op code
+NN_KERNEL(unary,                 UnaryFn)
+NN_KERNEL(unary_backward,        UnaryBackwardFn)
+NN_KERNEL(binary,                BinaryFn)
+NN_KERNEL(binary_backward,       BinaryBackwardFn)
+NN_KERNEL(scalar,                ScalarFn)
+NN_KERNEL(scalar_backward,       ScalarBackwardFn)
+
 // reductions
-NN_KERNEL(add_row_bias,          AddRowBiasFn)
-NN_KERNEL(col_sum,               ColSumFn)
 NN_KERNEL(argmax_rows,           ArgmaxRowsFn)
 NN_KERNEL(sum_to,                SumToFn)
 NN_KERNEL(sum_all,               SumAllFn)
 NN_KERNEL(sum_all_strided,       SumAllStridedFn)
 
-// elementwise
-NN_KERNEL(relu,                  ReluFn)
-NN_KERNEL(relu_backward,         ReluBackwardFn)
-NN_KERNEL(add,                   AddFn)
-NN_KERNEL(scale,                 ScaleFn)
+// whole-buffer writes that are not elementwise maps
 NN_KERNEL(axpy,                  AxpyFn)
 NN_KERNEL(fill,                  FillFn)
 NN_KERNEL(fill_from,             FillFromFn)
 
-// elementwise, strided reads
-NN_KERNEL(relu_strided,          ReluStridedFn)
-NN_KERNEL(relu_backward_strided, ReluBackwardStridedFn)
-NN_KERNEL(add_strided,           AddStridedFn)
-
-// softmax cross-entropy
+// softmax
+NN_KERNEL(softmax_rows,          SoftmaxRowsFn)
+NN_KERNEL(softmax_rows_backward, SoftmaxRowsBackwardFn)
 NN_KERNEL(softmax_ce,            SoftmaxCeFn)
 NN_KERNEL(softmax_ce_backward,   SoftmaxCeBackwardFn)
+
+// embedding
+NN_KERNEL(embedding,             EmbeddingFn)
+NN_KERNEL(embedding_backward,    EmbeddingBackwardFn)
 
 // optimisers
 NN_KERNEL(adam_step,             AdamStepFn)

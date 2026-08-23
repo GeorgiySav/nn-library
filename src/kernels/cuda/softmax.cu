@@ -114,5 +114,86 @@ void cuda_softmax_ce_backward(const Stream& s, const float* probs, const int32_t
   NN_CUDA_CHECK_LAUNCH(stream);
 }
 
+__global__ void softmax_rows_kernel(const float* __restrict__ X, float* __restrict__ Y,
+                                    int M, int N, int64_t sx) {
+  __shared__ float bcast;
+
+  for (int64_t row = blockIdx.x; row < M; row += gridDim.x) {
+    const float* x = X + row * sx;
+    float* y = Y + row * N;
+
+    float m = -FLT_MAX;
+    for (int c = threadIdx.x; c < N; c += blockDim.x) {
+      if (x[c] > m) m = x[c];
+    }
+    m = block_reduce(m, Max(), -FLT_MAX);
+    if (threadIdx.x == 0) bcast = m;
+    __syncthreads();
+    m = bcast;
+
+    float sum = 0.0f;
+    for (int c = threadIdx.x; c < N; c += blockDim.x) {
+      const float e = expf(x[c] - m);
+      y[c] = e;
+      sum += e;
+    }
+    sum = block_reduce(sum, Plus(), 0.0f);
+    if (threadIdx.x == 0) bcast = sum;
+    __syncthreads();
+
+    const float inv_s = 1.0f / bcast;
+    for (int c = threadIdx.x; c < N; c += blockDim.x) y[c] *= inv_s;
+    __syncthreads();   // bcast is reused by the next row this block takes
+  }
+}
+
+__global__ void softmax_rows_backward_kernel(const float* __restrict__ Y,
+                                             const float* __restrict__ G,
+                                             float* __restrict__ gX,
+                                             int M, int N, int64_t sy, int64_t sg) {
+  __shared__ float dot_bcast;
+
+  for (int64_t row = blockIdx.x; row < M; row += gridDim.x) {
+    const float* y = Y + row * sy;
+    const float* g = G + row * sg;
+    float* out = gX + row * N;
+
+    float dot = 0.0f;
+    for (int c = threadIdx.x; c < N; c += blockDim.x) dot += y[c] * g[c];
+    dot = block_reduce(dot, Plus(), 0.0f);
+    if (threadIdx.x == 0) dot_bcast = dot;
+    __syncthreads();
+    dot = dot_bcast;
+
+    for (int c = threadIdx.x; c < N; c += blockDim.x) out[c] = y[c] * (g[c] - dot);
+    __syncthreads();
+  }
+}
+
+void cuda_softmax_rows(const Stream& s, const float* X, float* Y,
+                       int M, int N, int64_t sx) {
+  if (M == 0 || N == 0) return;
+
+  auto stream = static_cast<cudaStream_t>(s.handle);
+  constexpr int block{256};
+  constexpr int kMaxGrid{4096};
+  const int grid = std::min(M, kMaxGrid);
+
+  softmax_rows_kernel<<<grid, block, 0, stream>>>(X, Y, M, N, sx);
+  NN_CUDA_CHECK_LAUNCH(stream);
+}
+
+void cuda_softmax_rows_backward(const Stream& s, const float* Y, const float* G,
+                                float* gX, int M, int N, int64_t sy, int64_t sg) {
+  if (M == 0 || N == 0) return;
+
+  auto stream = static_cast<cudaStream_t>(s.handle);
+  constexpr int block{256};
+  constexpr int kMaxGrid{4096};
+  const int grid = std::min(M, kMaxGrid);
+
+  softmax_rows_backward_kernel<<<grid, block, 0, stream>>>(Y, G, gX, M, N, sy, sg);
+  NN_CUDA_CHECK_LAUNCH(stream);
+}
 
 }

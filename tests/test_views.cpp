@@ -167,12 +167,11 @@ NN_TEST(row_reductions_absorb_a_row_stride) {
     NN_CHECK(!x.is_contiguous());
     const nn::Tensor packed = x.contiguous();
 
-    NN_CHECK_SAME(nn::ops::col_sum(x), nn::ops::col_sum(packed), 1e-5f);
     NN_CHECK_SAME(nn::ops::argmax_rows(x), nn::ops::argmax_rows(packed), 0.0f);
+    NN_CHECK_SAME(nn::ops::softmax_rows(x), nn::ops::softmax_rows(packed), 1e-6f);
 
     const nn::Tensor bias = nn::Tensor::from({1.0f, -2.0f, 3.0f, -4.0f, 5.0f}, dev);
-    NN_CHECK_SAME(nn::ops::add_row_bias(x, bias),
-                  nn::ops::add_row_bias(packed, bias), 1e-6f);
+    NN_CHECK_SAME(nn::ops::add(x, bias), nn::ops::add(packed, bias), 1e-6f);
   }
 }
 
@@ -282,7 +281,6 @@ NN_TEST(non_unit_innermost_stride_is_rejected) {
     const nn::Tensor base = nn::Tensor::zeros({8, 8}, dev);
     const nn::Tensor bad = base.transpose(0, 1);        // innermost stride 8
 
-    NN_CHECK_THROWS(nn::ops::col_sum(bad), std::invalid_argument);
     NN_CHECK_THROWS(nn::ops::argmax_rows(bad), std::invalid_argument);
     NN_CHECK_THROWS(nn::ops::matmul(bad, base, false, false), std::invalid_argument);
     NN_CHECK_THROWS(nn::ops::matmul(base, bad, false, false), std::invalid_argument);

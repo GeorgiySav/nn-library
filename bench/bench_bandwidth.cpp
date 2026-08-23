@@ -61,28 +61,41 @@ void bench_device(Device d) {
     float* b = B.device_ptr();
     float* c = C.device_ptr();
 
+    // Dense operands, so view_of hands the kernels a single stride-1 axis --
+    // the layout the elementwise family is expected to be fastest on.
+    const nn::TensorView va = nn::view_of(A);
+    const nn::TensorView vb = nn::view_of(B);
+    const nn::TensorView vc = nn::view_of(C);
+
     std::printf("\n");
     if (k.fill)
       row("fill", d, n, 4.0, peak, [&] { k.fill(s, 1.0f, a, n); });
-    if (k.scale)
-      row("scale", d, n, 8.0, peak, [&] { k.scale(s, 1.001f, a, n); });
-    if (k.relu)
-      row("relu", d, n, 8.0, peak, [&] { k.relu(s, a, b, n); });
-    if (k.add)
-      row("add", d, n, 12.0, peak, [&] { k.add(s, a, b, c, n); });
+    if (k.scalar)
+      row("scale", d, n, 8.0, peak,
+          [&] { k.scalar(s, nn::kernels::ScalarOp::MulScalar, 1.001f, a, va, a, n); });
+    if (k.unary)
+      row("relu", d, n, 8.0, peak,
+          [&] { k.unary(s, nn::kernels::UnaryOp::Relu, a, va, b, n); });
+    if (k.unary)
+      row("gelu", d, n, 8.0, peak,
+          [&] { k.unary(s, nn::kernels::UnaryOp::Gelu, a, va, b, n); });
+    if (k.binary)
+      row("add", d, n, 12.0, peak,
+          [&] { k.binary(s, nn::kernels::BinaryOp::Add, a, va, b, vb, c, n); });
     if (k.axpy)
       row("axpy", d, n, 12.0, peak, [&] { k.axpy(s, 2.0f, a, b, n); });
-    if (k.relu_backward)
-      row("relu_bwd", d, n, 12.0, peak, [&] { k.relu_backward(s, a, b, c, n); });
+    if (k.unary_backward)
+      row("relu_bwd", d, n, 12.0, peak,   // x is passed twice, so it is one stream
+          [&] { k.unary_backward(s, nn::kernels::UnaryOp::Relu, a, va, a, va, b, vb, c, n); });
   }
 }
 
 void report_missing(Device d) {
   const auto& k = nn::kernels::kernels(d);
-  const char* names[] = {"fill", "scale", "relu", "add", "axpy", "relu_backward"};
-  const void* ptrs[] = {(const void*)k.fill,  (const void*)k.scale,
-                        (const void*)k.relu,  (const void*)k.add,
-                        (const void*)k.axpy,  (const void*)k.relu_backward};
+  const char* names[] = {"fill", "scalar", "unary", "binary", "axpy", "unary_backward"};
+  const void* ptrs[] = {(const void*)k.fill,   (const void*)k.scalar,
+                        (const void*)k.unary,  (const void*)k.binary,
+                        (const void*)k.axpy,   (const void*)k.unary_backward};
   bool any = false;
   for (size_t i = 0; i < std::size(names); ++i) {
     if (!ptrs[i]) {

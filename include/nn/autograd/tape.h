@@ -9,6 +9,9 @@
 
 namespace nn::autograd {
 
+inline constexpr int kMaxNodeInputs = 8;
+using NodeInputs = nn::SmallVec<int, kMaxNodeInputs>;
+
 using BackwardFn = std::function<void(const Tensor& g_out, std::span<Tensor> g_in)>;
 
 struct Node {
@@ -19,7 +22,7 @@ struct Node {
   Dtor  destroy  = nullptr;
   void* captures = nullptr; // lives in the tape's arena
 
-  nn::SmallVec<int, 3> inputs; // node ids
+  NodeInputs inputs;                   // node ids
   std::shared_ptr<AutogradMeta> leaf; // non-null -> accumulate into leaf->grad
   const char* name = "";       // for debugging
 };
@@ -33,7 +36,7 @@ public:
   int node_for(const Tensor& t); // resolve an input to a node id, or -1
   
   template <class F>
-  int record(F&& fn, SmallVec<int, 3> inputs, const char* name) {
+  int record(F&& fn, NodeInputs inputs, const char* name) {
     using Fn = std::decay_t<F>;
     void* mem = arena_.alloc(sizeof(Fn), alignof(Fn));
     new (mem) Fn(std::forward<F>(fn));
@@ -55,9 +58,17 @@ public:
 
   void backward(const Tensor& loss, bool retain_graph = false);
   void clear();
-  int size() const;  
- 
+  int size() const;
+
   size_t arena_size() const { return arena_.bytes_reserved(); }
+
+  uint64_t epoch() const { return epoch_; }
+  // Every live tape registers under its current epoch, so a tensor can find the
+  // tape that produced it from the stamp it is already carrying. Returns null
+  // if that tape has since been cleared or destroyed, which is what lets
+  // Tensor::backward say so instead of following a dangling pointer.
+  static Tape* by_epoch(uint64_t epoch);
+
 private:
   int record_leaf(std::shared_ptr<AutogradMeta> m);
   // true if 'm' was stamped by this tape
@@ -87,6 +98,30 @@ public:
 
 private:
   Tape* prev_tape_ = nullptr;
+};
+
+// A tape and its activation together, which is what a training step actually
+// wants: declaring one at the top of the loop body makes everything below it
+// record, and destroying it at the end of the iteration frees the arena.
+//
+//   for (auto [xb, yb] : loader) {
+//     nn::autograd::GradScope grad;
+//     nn::Tensor loss = nn::cross_entropy(model(xb), yb);
+//     loss.backward();
+//     opt.step();
+//   }
+class GradScope {
+public:
+  GradScope() : scope_(tape_) {}
+
+  GradScope(const GradScope&) = delete;
+  GradScope& operator=(const GradScope&) = delete;
+
+  Tape& tape() { return tape_; }
+
+private:
+  Tape tape_;        // declared first: scope_ activates it on construction
+  TapeScope scope_;
 };
 
 Tape* active_tape();

@@ -168,25 +168,3 @@ NN_TEST(gradcheck_broadcast_add) {
     NN_CHECK(nn::test::gradCheck(b, forward, backward) < 2e-2f);
   }
 }
-
-// add_row_bias is exactly this special case, and col_sum is exactly its
-// backward -- which is the argument for deleting both.
-NN_TEST(broadcast_add_subsumes_add_row_bias) {
-  NN_TEST_FOR_EACH_DEVICE(dev) {
-    const nn::Tensor x = ramp(nn::Shape({5, 7}), dev);
-    const nn::Tensor b = ramp(nn::Shape({7}), dev);
-
-    const std::vector<float> viaBroadcast = host_of(nn::ops::add(x, b));
-    const std::vector<float> viaRowBias   = host_of(nn::ops::add_row_bias(x, b));
-    for (size_t i = 0; i < viaBroadcast.size(); ++i) {
-      NN_CHECK_CLOSE(viaBroadcast[i], viaRowBias[i], 1e-6f);
-    }
-
-    const nn::Tensor g = ramp(nn::Shape({5, 7}), dev);
-    const std::vector<float> viaSumTo  = host_of(nn::ops::sum_to(g, nn::Shape({7})));
-    const std::vector<float> viaColSum = host_of(nn::ops::col_sum(g));
-    for (size_t i = 0; i < viaSumTo.size(); ++i) {
-      NN_CHECK_CLOSE(viaSumTo[i], viaColSum[i], 1e-5f);
-    }
-  }
-}

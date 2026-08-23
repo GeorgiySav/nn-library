@@ -4,6 +4,7 @@
 
 #include <nn/core/strides.h>
 #include <nn/core/device.h>
+#include <nn/kernels/elementwise_ops.h>
 
 namespace nn::kernels {
 
@@ -24,19 +25,18 @@ namespace nn::kernels {
 // destination. copy_into is the one deliberate exception -- writing a result
 // into a window of a larger dense tensor is what the backward of slice is, and
 // it cannot be expressed as a dense output.
+//
+// The elementwise family takes a TensorView unconditionally rather than having
+// a dense sibling per op. view_of collapses adjacent contiguous axes, so a
+// dense tensor arrives as a rank-1 stride-1 view and offset_of costs one
+// modulo; measured, that is within noise of a kernel with no view at all, while
+// a rank-3 view costs 1.23x. Paying for the view is cheaper than maintaining
+// two kernels per op.
 
 using GemmFn              = void(const Stream& s, const float* A, const float* B,
                                     float*C, int M, int N, int K,
                                     int64_t lda, int64_t ldb, int64_t ldc,
                                     bool transA, bool transB);
-using AddRowBiasFn        = void(const Stream& s, const float* X, const float* b, float* Y,
-                                    int M, int N, int64_t sx);
-using ColSumFn            = void(const Stream& s, const float* X, float* out,
-                                    int M, int N, int64_t sx);
-using ReluFn              = void(const Stream& s, const float* X, float* Y, int64_t n);
-using ReluBackwardFn      = void(const Stream& s, const float* X, const float* gY, float* gX, int64_t n);
-using AddFn               = void(const Stream& s, const float* A, const float* B, float* C, int64_t n);
-using ScaleFn             = void(const Stream& s, float alpha, float* X, int64_t n);
 using AxpyFn              = void(const Stream& s, float alpha, const float* X, float* Y, int64_t n);
 using FillFn              = void(const Stream& s, float v, float* X, int64_t n);
 // fill, but the value is read from device memory instead of a host argument
@@ -50,15 +50,48 @@ using AdamStepFn          = void(const Stream& s, float* p, const float* g, floa
 using ArgmaxRowsFn        = void(const Stream& s, const float* X, int32_t* out,
                                     int M, int N, int64_t sx);
 
-// Strided siblings
-using ReluStridedFn         = void(const Stream& s, const float* X, TensorView v,
-                                      float* Y, int64_t n);
-using ReluBackwardStridedFn = void(const Stream& s, const float* X, TensorView vx,
-                                      const float* gY, TensorView vg,
-                                      float* gX, int64_t n);
-using AddStridedFn          = void(const Stream& s, const float* A, TensorView va,
-                                      const float* B, TensorView vb,
-                                      float* C, int64_t n);
+// The elementwise family. One slot per arity rather than per op: the op code
+// selects the arithmetic inside the kernel, from elementwise_ops.h.
+using UnaryFn             = void(const Stream& s, UnaryOp op,
+                                    const float* X, TensorView vx,
+                                    float* Y, int64_t n);
+using UnaryBackwardFn     = void(const Stream& s, UnaryOp op,
+                                    const float* X, TensorView vx,
+                                    const float* Y, TensorView vy,
+                                    const float* G, TensorView vg,
+                                    float* gX, int64_t n);
+using BinaryFn            = void(const Stream& s, BinaryOp op,
+                                    const float* A, TensorView va,
+                                    const float* B, TensorView vb,
+                                    float* C, int64_t n);
+// side 0 -> d/dA, side 1 -> d/dB, both at the broadcast shape.
+using BinaryBackwardFn    = void(const Stream& s, BinaryOp op, int side,
+                                    const float* A, TensorView va,
+                                    const float* B, TensorView vb,
+                                    const float* C, TensorView vc,
+                                    const float* G, TensorView vg,
+                                    float* out, int64_t n);
+using ScalarFn            = void(const Stream& s, ScalarOp op, float k,
+                                    const float* X, TensorView vx,
+                                    float* Y, int64_t n);
+using ScalarBackwardFn    = void(const Stream& s, ScalarOp op, float k,
+                                    const float* X, TensorView vx,
+                                    const float* Y, TensorView vy,
+                                    const float* G, TensorView vg,
+                                    float* gX, int64_t n);
+
+// Softmax over the last axis
+using SoftmaxRowsFn         = void(const Stream& s, const float* X, float* Y,
+                                      int M, int N, int64_t sx);
+using SoftmaxRowsBackwardFn = void(const Stream& s, const float* Y, const float* G,
+                                      float* gX, int M, int N,
+                                      int64_t sy, int64_t sg);
+
+// Row gather
+using EmbeddingFn         = void(const Stream& s, const float* W, const int32_t* idx,
+                                    float* Y, int64_t n_idx, int D, int V);
+using EmbeddingBackwardFn = void(const Stream& s, const float* G, const int32_t* idx,
+                                    float* gW, int64_t n_idx, int D, int V);
 
 using CopyStridedFn        = void(const Stream& s, const float* src, TensorView v,
                                     float* dst, int64_t n);

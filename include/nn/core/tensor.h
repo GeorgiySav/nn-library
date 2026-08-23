@@ -82,6 +82,41 @@ public:
   Tensor& grad();
   void zero_grad();
 
+  // Seeds this scalar with a gradient of 1 and walks the tape that produced it
+  // back to the leaves. The tape does not have to still be the active one, but
+  // it does have to still exist and not have been cleared.
+  void backward(bool retain_graph = false) const;
+
+  // --- differentiable ops -------------------------------------------------
+  //
+  // Every method below routes through nn::autograd, so it records itself on
+  // the active tape and is a plain kernel call when there is none. The
+  // elementwise ones are generated from the same three lists the kernels are:
+  // adding a line to unary_ops.def adds the kernel, the autograd node, the
+  // free function and this method at once.
+#define NN_UNARY(Name, method, fwd, bwd) Tensor method() const;
+#include <nn/kernels/unary_ops.def>
+#undef NN_UNARY
+
+#define NN_BINARY(Name, method, fwd, da, db) Tensor method(const Tensor& other) const;
+#include <nn/kernels/binary_ops.def>
+#undef NN_BINARY
+
+#define NN_SCALAR(Name, method, fwd, bwd) Tensor method(float k) const;
+#include <nn/kernels/scalar_ops.def>
+#undef NN_SCALAR
+
+  Tensor pow(float e) const;                 // the scalar form, spelled better
+  Tensor mm(const Tensor& other) const;      // 2-D matrix product
+  Tensor t() const;                          // swap the last two axes
+  Tensor softmax() const;                    // over the last axis
+
+  Tensor sum() const;
+  Tensor sum(int dim, bool keepdim = false) const;
+  Tensor mean() const;
+  Tensor mean(int dim, bool keepdim = false) const;
+  Tensor var(int dim, bool keepdim = false, bool unbiased = true) const;
+
 private:
   std::shared_ptr<Storage> storage_;
   Shape shape_;
@@ -93,9 +128,25 @@ private:
 
 TensorView view_of(const Tensor& t);
 
-// Human-readable dump: header line (shape, dtype, device, and strides when they
-// are not the contiguous ones) followed by a numpy-style body with the middle
-// of any axis longer than 2*edge elided. Works on any device and any layout.
+// Operators, so an expression reads left to right instead of inside out.
+// All of them are differentiable; the float forms avoid allocating and
+// uploading a one-element tensor just to broadcast it.
+Tensor operator+(const Tensor& a, const Tensor& b);
+Tensor operator-(const Tensor& a, const Tensor& b);
+Tensor operator*(const Tensor& a, const Tensor& b);
+Tensor operator/(const Tensor& a, const Tensor& b);
+
+Tensor operator+(const Tensor& a, float k);
+Tensor operator+(float k, const Tensor& a);
+Tensor operator-(const Tensor& a, float k);
+Tensor operator-(float k, const Tensor& a);
+Tensor operator*(const Tensor& a, float k);
+Tensor operator*(float k, const Tensor& a);
+Tensor operator/(const Tensor& a, float k);
+Tensor operator/(float k, const Tensor& a);
+
+Tensor operator-(const Tensor& a);
+
 std::string to_string(const Tensor& t, int edge = 3);
 std::ostream& operator<<(std::ostream& os, const Tensor& t);
 
