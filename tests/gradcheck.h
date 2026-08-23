@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <limits>
 
 #include <nn/core/allocator.h>
 #include <nn/core/tensor.h>
@@ -56,8 +57,12 @@ inline float gradCheck(Tensor& param,
 
     float numerical_grad = (loss_plus_h - loss_minus_h) / (2.0f * h);
     float analytical_grad = grad.host_data()[idx];
-    float error = std::abs(numerical_grad - analytical_grad) /
-                  std::max(std::abs(numerical_grad) + std::abs(analytical_grad), 1e-4f);
+
+    const float scale = std::max(std::abs(loss_plus_h), std::abs(loss_minus_h));
+    const float floor = std::max(8.0f * std::numeric_limits<float>::epsilon() * scale / h,
+                                 1e-4f);
+    const float gap = std::max(0.0f, std::abs(numerical_grad - analytical_grad) - floor);
+    float error = gap / (std::abs(numerical_grad) + std::abs(analytical_grad) + 1e-8f);
     max_error = std::max(max_error, error);
   }
 

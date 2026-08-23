@@ -24,6 +24,7 @@ Tensor scalar(ops::ScalarOp op, const Tensor& x, float k);
 Tensor matmul(const Tensor& x, const Tensor& w); // [M, K] @ [K, N] -> [M, N]
 Tensor cross_entropy(const Tensor& logits, const Tensor& labels); // rank 0
 
+Tensor contiguous(const Tensor& x);   // differentiable pack; identity backward
 Tensor permute(const Tensor& x, std::span<const int> order);
 Tensor transpose(const Tensor& x, int a, int b);
 Tensor reshape(const Tensor& x, std::span<const int> shape);
@@ -55,6 +56,7 @@ namespace nn {
 // The differentiable ops, reachable without naming the tape machinery. The
 // non-differentiable kernels keep their own names under nn::ops.
 using autograd::cat;
+using autograd::contiguous;
 using autograd::cross_entropy;
 using autograd::layer_norm;
 using autograd::masked_fill;

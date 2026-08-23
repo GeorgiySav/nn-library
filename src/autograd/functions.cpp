@@ -84,13 +84,37 @@ Tensor scalar(ops::ScalarOp op, const Tensor& x, float k) {
 #include <nn/kernels/scalar_ops.def>
 #undef NN_SCALAR
 
+namespace {
+
+// Every axis but the last folded into one row index. Used only on gradients
+// inside a backward, where nothing is being recorded.
+Tensor as_matrix(const Tensor& t) {
+  const int r = t.shape().rank();
+  const int last = t.shape().dim(r - 1);
+  return t.reshape(Shape({int(t.numel() / last), last}));
+}
+
+}  // namespace
+
 Tensor matmul(const Tensor& x, const Tensor& w) {
   Tensor out = ops::matmul(x, w);
 
   record_op(out, "matmul",
     [x, w](const Tensor& g, std::span<Tensor> g_in) {
-      g_in[0] = ops::matmul(g, w, false, true); // g @ W^T
-      g_in[1] = ops::matmul(x, g, true, false); // X^T @ g
+      // g @ W^T. When W has no batch axes this folds to a single GEMM on its
+      // own, the same way the forward did.
+      g_in[0] = ops::sum_to(ops::matmul(g, w, false, true), x.shape());
+
+      // X^T @ g. The transpose blocks the fold rule inside ops::matmul, so a
+      // batched X would give one small GEMM per batch element and then a
+      // reduction. Folding both operands by hand turns that back into the
+      // single [K, B*T] x [B*T, N] GEMM it should be -- this is the weight
+      // gradient of every Linear in the model, so it is worth the special case.
+      if (w.shape().rank() == 2 && x.shape().rank() > 2) {
+        g_in[1] = ops::matmul(as_matrix(x), as_matrix(g), true, false);
+      } else {
+        g_in[1] = ops::sum_to(ops::matmul(x, g, true, false), w.shape());
+      }
     }, x, w);
 
   return out;
@@ -128,6 +152,18 @@ Tensor embedding(const Tensor& weight, const Tensor& idx) {
     [idx, V = weight.shape().dim(0)](const Tensor& g, std::span<Tensor> g_in) {
       g_in[0] = ops::embedding_backward(g, idx, V);
     }, weight);
+
+  return out;
+}
+
+Tensor contiguous(const Tensor& x) {
+  if (x.is_contiguous()) return x;
+
+  Tensor out = x.contiguous();
+  record_op(out, "contiguous",
+    [](const Tensor& g, std::span<Tensor> g_in) {
+      g_in[0] = g;
+    }, x);
 
   return out;
 }

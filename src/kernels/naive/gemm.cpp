@@ -70,13 +70,20 @@ void gemm_tt(const float* A, const float* B, float* C, int M, int N, int K,
 
 }  // namespace
 
-void naive_gemm(const Stream& s, const float* A, const float* B, float* C,
+void naive_gemm(const Stream&, const float* A, const float* B, float* C,
                 int M, int N, int K, int64_t lda, int64_t ldb, int64_t ldc,
-                bool transA, bool transB) {
-  if (!transA && !transB) return gemm_nn(A, B, C, M, N, K, lda, ldb, ldc);
-  if (!transA &&  transB) return gemm_nt(A, B, C, M, N, K, lda, ldb, ldc);
-  if ( transA && !transB) return gemm_tn(A, B, C, M, N, K, lda, ldb, ldc);
-  gemm_tt(A, B, C, M, N, K, lda, ldb, ldc);
+                bool transA, bool transB,
+                int batch, int64_t sa, int64_t sb, int64_t sc) {
+  for (int i = 0; i < batch; ++i) {
+    const float* a = A + int64_t(i) * sa;
+    const float* b = B + int64_t(i) * sb;
+    float* c = C + int64_t(i) * sc;
+
+    if      (!transA && !transB) gemm_nn(a, b, c, M, N, K, lda, ldb, ldc);
+    else if (!transA &&  transB) gemm_nt(a, b, c, M, N, K, lda, ldb, ldc);
+    else if ( transA && !transB) gemm_tn(a, b, c, M, N, K, lda, ldb, ldc);
+    else                         gemm_tt(a, b, c, M, N, K, lda, ldb, ldc);
+  }
 }
 
 }

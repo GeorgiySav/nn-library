@@ -27,10 +27,16 @@ namespace nn::kernels {
 // it cannot be expressed as a dense output.
 //
 
+// One GEMM, or a batch of them. Every matrix in a batch shares M, N, K and its
+// leading dimension; consecutive matrices sit sa / sb / sc elements apart. A
+// stride of 0 means "the same matrix every time", which is how a weight is
+// shared across a batch without being copied. batch == 1 with zero strides is
+// the plain two-dimensional case.
 using GemmFn              = void(const Stream& s, const float* A, const float* B,
                                     float*C, int M, int N, int K,
                                     int64_t lda, int64_t ldb, int64_t ldc,
-                                    bool transA, bool transB);
+                                    bool transA, bool transB,
+                                    int batch, int64_t sa, int64_t sb, int64_t sc);
 using AxpyFn              = void(const Stream& s, float alpha, const float* X, float* Y, int64_t n);
 using FillFn              = void(const Stream& s, float v, float* X, int64_t n);
 // fill, but the value is read from device memory instead of a host argument

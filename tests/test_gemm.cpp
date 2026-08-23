@@ -13,13 +13,11 @@ nn::kernels::GemmFn* gemm(nn::Device d) {
   return k.gemm;
 }
 
-// Every operand in this file is dense, so each leading dimension is the extent
-// it used to be hard-coded as. Strided operands are covered in test_views.cpp.
 void gemm_dense(nn::Device d, const nn::Stream& s, const float* A, const float* B,
                 float* C, int M, int N, int K, bool transA, bool transB) {
   gemm(d)(s, A, B, C, M, N, K,
           /*lda=*/transA ? M : K, /*ldb=*/transB ? K : N, /*ldc=*/N,
-          transA, transB);
+          transA, transB, /*batch=*/1, 0, 0, 0);
 }
 
 void ref_gemm(const float* A, const float* B, float* C, int M, int N, int K) {
