@@ -6,7 +6,7 @@
 #include <nn/core/tensor.h>
 #include <nn/kernels/kernel_api.h>
 
-nn::kernels::SoftmaxCeFn softmax_ce(nn::Device d) {
+nn::kernels::SoftmaxCeFn* softmax_ce(nn::Device d) {
   nn::kernels::init_kernels();
   const auto& k = nn::kernels::kernels(d);
   NN_CHECK(k.softmax_ce != nullptr);

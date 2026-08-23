@@ -1,0 +1,52 @@
+// The one place a kernel is named. Including this file with NN_KERNEL defined
+// generates, from a single line per kernel:
+//
+//   kernel_api.h      the KernelTable slot
+//   naive_kernels.h   the naive_<name> declaration
+//   cuda_kernels.h    the cuda_<name> declaration
+//   registry.cpp      both backends' registrations, and the null check
+//
+// That works because every backend function is named <backend>_<slot> and the
+// Fn aliases are function types rather than pointers-to-function, so `ReluFn
+// naive_relu;` declares a function with exactly the signature the table wants.
+// Add a kernel by adding a line here, the alias in kernel_api.h, and the two
+// bodies -- nothing else.
+//
+// NN_KERNEL(slot, FnAlias)
+
+// gemm
+NN_KERNEL(gemm,                  GemmFn)
+
+// reductions
+NN_KERNEL(add_row_bias,          AddRowBiasFn)
+NN_KERNEL(col_sum,               ColSumFn)
+NN_KERNEL(argmax_rows,           ArgmaxRowsFn)
+NN_KERNEL(sum_to,                SumToFn)
+NN_KERNEL(sum_all,               SumAllFn)
+NN_KERNEL(sum_all_strided,       SumAllStridedFn)
+
+// elementwise
+NN_KERNEL(relu,                  ReluFn)
+NN_KERNEL(relu_backward,         ReluBackwardFn)
+NN_KERNEL(add,                   AddFn)
+NN_KERNEL(scale,                 ScaleFn)
+NN_KERNEL(axpy,                  AxpyFn)
+NN_KERNEL(fill,                  FillFn)
+NN_KERNEL(fill_from,             FillFromFn)
+
+// elementwise, strided reads
+NN_KERNEL(relu_strided,          ReluStridedFn)
+NN_KERNEL(relu_backward_strided, ReluBackwardStridedFn)
+NN_KERNEL(add_strided,           AddStridedFn)
+
+// softmax cross-entropy
+NN_KERNEL(softmax_ce,            SoftmaxCeFn)
+NN_KERNEL(softmax_ce_backward,   SoftmaxCeBackwardFn)
+
+// optimisers
+NN_KERNEL(adam_step,             AdamStepFn)
+
+// copies
+NN_KERNEL(copy_strided,          CopyStridedFn)
+NN_KERNEL(copy_strided_i32,      CopyStridedI32Fn)
+NN_KERNEL(copy_into_strided,     CopyIntoStridedFn)

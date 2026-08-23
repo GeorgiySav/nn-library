@@ -47,72 +47,31 @@ const char* active_backend_name(Device d) {
 
 void register_naive_kernels() {
   KernelTable& t = table(Device::CPU);
-  t.gemm = &naive_gemm;
-  // reduce
-  t.add_row_bias = &naive_add_row_bias;
-  t.col_sum = &naive_col_sum;
-  t.argmax_rows = &naive_argmax_rows;
-  t.sum_to = &naive_sum_to;
-  t.sum_all = &naive_sum_all;
-  t.sum_all_strided = &naive_sum_all_strided;
-  // elementwise
-  t.relu = &naive_relu;
-  t.relu_backward = &naive_relu_backward;
-  t.add = &naive_add;
-  t.scale = &naive_scale;
-  t.axpy = &naive_axpy;
-  t.fill = &naive_fill;
-  t.fill_from = &naive_fill_from;
-  // elementwise, strided reads
-  t.relu_strided = &naive_relu_strided;
-  t.relu_backward_strided = &naive_relu_backward_strided;
-  t.add_strided = &naive_add_strided;
-  // softmax cross-entropy
-  t.softmax_ce = &naive_softmax_ce;
-  t.softmax_ce_backward = &naive_softmax_ce_backward;
-  // optimisers
-  t.adam_step = &naive_adam_step;
-  // copy
-  t.copy_strided = &naive_copy_strided;
-  t.copy_strided_i32 = &naive_copy_strided_i32;
-  t.copy_into_strided = &naive_copy_into_strided;
+#define NN_KERNEL(name, Type) t.name = &naive_##name;
+#include <nn/kernels/kernel_list.def>
+#undef NN_KERNEL
 
   g_backend[index_of(Device::CPU)] = "naive";
 }
 
 void register_cuda_kernels() {
-  KernelTable& t = table(Device::CUDA); 
-  t.gemm = &cuda_gemm;
-  // reduce
-  t.add_row_bias = &cuda_add_row_bias;
-  t.col_sum = &cuda_col_sum;
-  t.argmax_rows = &cuda_argmax_rows;
-  t.sum_to = &cuda_sum_to;
-  t.sum_all = &cuda_sum_all;
-  t.sum_all_strided = &cuda_sum_all_strided;
-  // elementwise
-  t.relu = &cuda_relu;
-  t.relu_backward = &cuda_relu_backward;
-  t.add = &cuda_add;
-  t.scale = &cuda_scale;
-  t.axpy = &cuda_axpy;
-  t.fill = &cuda_fill;
-  t.fill_from = &cuda_fill_from;
-  // elementwise, strided reads
-  t.relu_strided = &cuda_relu_strided;
-  t.relu_backward_strided = &cuda_relu_backward_strided;
-  t.add_strided = &cuda_add_strided;
-  // softmax cross-entropy
-  t.softmax_ce = &cuda_softmax_ce;
-  t.softmax_ce_backward = &cuda_softmax_ce_backward;
-  // optimisers
-  t.adam_step = &cuda_adam_step;
-  // copy
-  t.copy_strided = &cuda_copy_strided;
-  t.copy_strided_i32 = &cuda_copy_strided_i32;
-  t.copy_into_strided = &cuda_copy_into_strided;
+  KernelTable& t = table(Device::CUDA);
+#define NN_KERNEL(name, Type) t.name = &cuda_##name;
+#include <nn/kernels/kernel_list.def>
+#undef NN_KERNEL
 
   g_backend[index_of(Device::CUDA)] = "CUDA";
+}
+
+void validate_table(Device d) {
+  const KernelTable& t = g_tables[index_of(d)];
+#define NN_KERNEL(name, Type)                                            \
+  if (!t.name) {                                                         \
+    throw std::runtime_error(std::string("kernel \"" #name "\" is not "     \
+                             "registered for ") + device_name(d));         \
+  }
+#include <nn/kernels/kernel_list.def>
+#undef NN_KERNEL
 }
 
 void register_cublas_kernels() {
@@ -131,6 +90,11 @@ void init_kernels() {
     const char* sel = std::getenv("NN_KERNELS");
     if (!(sel && std::strcmp(sel, "handwritten") == 0))
       register_cublas_kernels();
+
+    // Cheap, runs once, and turns a forgotten registration from a null call at
+    // first use into a named error at startup.
+    validate_table(Device::CPU);
+    validate_table(Device::CUDA);
 
     return true;
   }();
