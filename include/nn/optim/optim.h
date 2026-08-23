@@ -3,10 +3,12 @@
 #include <algorithm>
 #include <cmath>
 #include <functional>
+#include <string>
 #include <span>
 #include <stdexcept>
 #include <vector>
 
+#include <nn/core/state.h>
 #include <nn/core/tensor.h>
 #include <nn/autograd/tape.h>
 #include <nn/ops/ops.h>
@@ -81,9 +83,13 @@ public:
   virtual void step() = 0;
   virtual void zero_grad() = 0;
 
-  // The learning rate lives here rather than in each subclass so a Schedule
-  // can drive any optimiser. Changing it between steps is the point; nothing
-  // else about the optimiser's state depends on it.
+  virtual void collect_state(const std::string& prefix,
+                             std::vector<NamedTensor>& tensors,
+                             std::vector<NamedScalar>& scalars) = 0;
+
+  virtual void apply_state(const std::string& prefix,
+                           std::span<const NamedScalar> scalars) = 0;
+
   float lr() const { return lr_; }
   void set_lr(float lr) { lr_ = lr; }
 
@@ -106,6 +112,17 @@ public:
   }
 
   void zero_grad() override { for (Tensor* p : params_) p->zero_grad(); }
+
+  // Plain SGD carries no state; the rate is the caller's or a schedule's.
+  void collect_state(const std::string& prefix, std::vector<NamedTensor>&,
+                     std::vector<NamedScalar>& scalars) override {
+    scalars.push_back({prefix + "lr", double(lr_)});
+  }
+
+  void apply_state(const std::string& prefix,
+                   std::span<const NamedScalar> scalars) override {
+    lr_ = float(scalar_value(scalars, prefix + "lr"));
+  }
 
 private:
   std::vector<Tensor*> params_;
@@ -142,6 +159,22 @@ public:
   }
 
   void zero_grad() override { for (Tensor* p : params_) p->zero_grad(); }
+
+  void collect_state(const std::string& prefix, std::vector<NamedTensor>& tensors,
+                     std::vector<NamedScalar>& scalars) override {
+    for (size_t i = 0; i < params_.size(); ++i) {
+      tensors.push_back({prefix + "m." + std::to_string(i), &m_[i]});
+      tensors.push_back({prefix + "v." + std::to_string(i), &v_[i]});
+    }
+    scalars.push_back({prefix + "step", double(step_)});
+    scalars.push_back({prefix + "lr", double(lr_)});
+  }
+
+  void apply_state(const std::string& prefix,
+                   std::span<const NamedScalar> scalars) override {
+    step_ = int(scalar_value(scalars, prefix + "step"));
+    lr_   = float(scalar_value(scalars, prefix + "lr"));
+  }
 
   // The decay each parameter actually got, in the order they were given.
   std::span<const float> weight_decays() const { return wd_; }

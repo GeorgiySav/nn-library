@@ -5,6 +5,7 @@
 #include <memory>
 #include <stdexcept>
 
+#include <nn/core/state.h>
 #include <nn/core/tensor.h>
 #include <nn/autograd/functions.h>
 
@@ -14,16 +15,30 @@ class Module {
 public:
   virtual ~Module() = default;
   virtual Tensor forward(const Tensor& x) = 0;
-  virtual void collect_parameters(std::vector<Tensor*>& out) = 0;
+
+  // name what you own, under the path you were given.
+  virtual void collect_named(const std::string& prefix,
+                            std::vector<NamedTensor>& out) = 0;
 
   // So a call site reads `model(x)`. Non-virtual on purpose: overriding
   // forward is the extension point, and this only spells it differently.
   Tensor operator()(const Tensor& x) { return forward(x); }
 
+  std::vector<NamedTensor> named_parameters() {
+    std::vector<NamedTensor> v;
+    collect_named("", v);
+    return v;
+  }
+
   std::vector<Tensor*> parameters() {
     std::vector<Tensor*> p;
     collect_parameters(p);
     return p;
+  }
+
+  // The flat view, for an optimiser or a clip that does not care about names.
+  void collect_parameters(std::vector<Tensor*>& out) {
+    for (NamedTensor& p : named_parameters()) out.push_back(p.t);
   }
 
   void zero_grad() { for (Tensor* p : parameters()) p->zero_grad(); }
@@ -59,9 +74,9 @@ public:
     return x.mm(w_) + b_;
   }
 
-  void collect_parameters(std::vector<Tensor*>& out) override {
-    out.push_back(&w_);
-    out.push_back(&b_);
+  void collect_named(const std::string& prefix, std::vector<NamedTensor>& out) override {
+    out.push_back({prefix + "w", &w_});
+    out.push_back({prefix + "b", &b_});
   }
 
 private:
@@ -76,7 +91,7 @@ public:
     return x.relu();
   }
 
-  void collect_parameters(std::vector<Tensor*>&) override {}
+  void collect_named(const std::string&, std::vector<NamedTensor>&) override {}
 };
 
 class GeLu : public Module {
@@ -87,7 +102,7 @@ public:
     return x.gelu();
   }
 
-  void collect_parameters(std::vector<Tensor*>&) override {}
+  void collect_named(const std::string&, std::vector<NamedTensor>&) override {}
 };
 
 // Normalises over the last axis. weight starts at 1 and bias at 0, so an
@@ -104,9 +119,9 @@ public:
     return autograd::layer_norm(x, w_, b_, eps_);
   }
 
-  void collect_parameters(std::vector<Tensor*>& out) override {
-    out.push_back(&w_);
-    out.push_back(&b_);
+  void collect_named(const std::string& prefix, std::vector<NamedTensor>& out) override {
+    out.push_back({prefix + "w", &w_});
+    out.push_back({prefix + "b", &b_});
   }
 
 private:
@@ -126,8 +141,8 @@ public:
     return autograd::embedding(w_, idx);
   }
 
-  void collect_parameters(std::vector<Tensor*>& out) override {
-    out.push_back(&w_);
+  void collect_named(const std::string& prefix, std::vector<NamedTensor>& out) override {
+    out.push_back({prefix + "w", &w_});
   }
 
 private:
@@ -146,7 +161,7 @@ public:
     return autograd::dropout(x, p_, training());
   }
 
-  void collect_parameters(std::vector<Tensor*>&) override {}
+  void collect_named(const std::string&, std::vector<NamedTensor>&) override {}
 
   float p() const { return p_; }
 
@@ -173,8 +188,10 @@ public:
     return out;
   }
 
-  void collect_parameters(std::vector<Tensor*>& out) override {
-    for (auto& layer : layers_) layer->collect_parameters(out);
+  void collect_named(const std::string& prefix, std::vector<NamedTensor>& out) override {
+    for (size_t i = 0; i < layers_.size(); ++i) {
+      layers_[i]->collect_named(prefix + std::to_string(i) + ".", out);
+    }
   }
 
   void set_training(bool on) override {

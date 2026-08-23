@@ -77,7 +77,13 @@ inline void manual_seed(uint64_t seed) {
   detail::rng_counter().store(0);
 }
 
-inline uint64_t random_seed() { return detail::rng_seed().load(); }
+inline uint64_t random_seed()    { return detail::rng_seed().load(); }
+inline uint64_t random_counter() { return detail::rng_counter().load(); }
+
+inline void set_random_state(uint64_t seed, uint64_t counter) {
+  detail::rng_seed().store(seed);
+  detail::rng_counter().store(counter);
+}
 
 inline uint64_t reserve_random(int64_t n) {
   return detail::rng_counter().fetch_add(uint64_t(n < 0 ? 0 : n));

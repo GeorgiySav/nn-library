@@ -12,6 +12,8 @@
 #include <nn/autograd/tape.h>
 #include <nn/metrics.h>
 
+#include <nn/io/checkpoint.h>
+
 #include <nn/data/mnist.h>
 #include <nn/data/dataloader.h>
 
@@ -77,6 +79,16 @@ int main(int argc, char** argv) {
 
     std::printf("epoch %2d: loss %.4f  test acc %.4f\n",
                 epoch, running / steps, accuracy(model, eval));
+
+    nn::io::save_checkpoint(NN_PROJECT_ROOT "/mnist.ckpt", model, opt, epoch + 1);
   }
 
+  nn::Sequential reloaded(
+    nn::Linear(784, 128, rng),
+    nn::ReLu(),
+    nn::Linear(128, 10, rng)
+  );
+  reloaded.to(device);
+  nn::io::load_weights(NN_PROJECT_ROOT "/mnist.ckpt", reloaded);
+  std::printf("reloaded:      test acc %.4f\n", accuracy(reloaded, eval));
 }
