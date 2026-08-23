@@ -1,7 +1,9 @@
 #pragma once
 
 #include <memory>
+#include <iosfwd>
 #include <span>
+#include <string>
 
 #include <nn/core/rng.h>
 #include <nn/core/dtype.h>
@@ -64,6 +66,8 @@ public:
   const void* raw() const;
 
   float item() const;
+  // Convenience for printf/debuggers; see to_string below.
+  std::string str() const;
 
   Tensor to(Device d) const;
   Tensor clone() const;
@@ -86,6 +90,12 @@ private:
 };
 
 TensorView view_of(const Tensor& t);
+
+// Human-readable dump: header line (shape, dtype, device, and strides when they
+// are not the contiguous ones) followed by a numpy-style body with the middle
+// of any axis longer than 2*edge elided. Works on any device and any layout.
+std::string to_string(const Tensor& t, int edge = 3);
+std::ostream& operator<<(std::ostream& os, const Tensor& t);
 
 struct AutogradMeta {
   bool requires_grad = false;

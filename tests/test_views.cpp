@@ -77,7 +77,7 @@ NN_TEST(views_report_contiguity_correctly) {
 }
 
 NN_TEST(contiguous_materialises_the_right_elements) {
-  const int B = 2, T = 5, H = 3, dh = 4, d = H * dh;
+  const int B = 2, T = 5, H = 3, dh = 4;
 
   NN_TEST_FOR_EACH_DEVICE(dev) {
     std::vector<float> host(size_t(B) * T * H * dh);
