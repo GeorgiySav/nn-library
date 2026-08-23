@@ -114,6 +114,7 @@ constexpr int kSumAllWorkspace = 1024;
 // One kernel for every layout: see strided_index.h for the measurement that
 // retired the dense sibling.
 using SumAllFn             = void(const Stream& s, const float* X, TensorView v,
+                                     Accum a,
                                      float* out, float* workspace, int64_t n);
 
 // Slots are pointers to the function types above, generated so that the table

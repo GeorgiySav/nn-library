@@ -8,6 +8,7 @@ namespace nn::ops {
 using kernels::UnaryOp;
 using kernels::BinaryOp;
 using kernels::ScalarOp;
+using kernels::Accum;
 
 Tensor matmul(const Tensor& a, const Tensor& b, bool transA = false, bool transB = false);
 void   matmul_into(Tensor& out, const Tensor& a, const Tensor& b,
@@ -33,7 +34,7 @@ Tensor mul(const Tensor& a, const Tensor& b);
 // Reductions. sum_to is the primitive: it is the backward of every broadcast,
 // and sum over an axis is the same kernel with that axis set to 1.
 Tensor sum_to(const Tensor& g, const Shape& target);
-Tensor sum_all(const Tensor& x);
+Tensor sum_all(const Tensor& x, Accum a = Accum::Sum);
 Tensor sum_dim(const Tensor& x, int dim, bool keepdim);
 Tensor mean_all(const Tensor& x);
 Tensor mean_dim(const Tensor& x, int dim, bool keepdim);
@@ -48,6 +49,7 @@ Tensor embedding_backward(const Tensor& g, const Tensor& idx, int V);
 
 void   add_inplace(Tensor& a, const Tensor& b);
 void   scale_inplace(Tensor& a, float alpha);
+void   scalar_inplace(Tensor& a, ScalarOp op, float k);
 void   axpy_inplace(Tensor& y, float alpha, const Tensor& x);
 void   fill_inplace(Tensor& a, float v);
 // Broadcast a scalar that already lives on the device.

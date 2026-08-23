@@ -28,9 +28,6 @@ cmake --build build-rel --target bench_gemm bench_tape
 
 - Pinned memory
 
-normalise_dim in Tensor::transpose/permute/slice, so negative axes work everywhere or throw.
-Will bite during training
-4. Gradient clipping by global norm — transformers diverge without it. Needs a sum-of-squares over all parameter grads, which sum_all already gives.
 5. AdamW + an LR schedule. Adam has no weight decay and there's no scheduler; warmup is close to mandatory.
 6. Dropout — needs a device-side RNG. Pcg32 is host-only, so this is a new kernel (counter-based, seed+offset, so it stays reproducible).
 

@@ -27,10 +27,10 @@ void naive_sum_to(const Stream&, const float* g, TensorView keep, TensorView red
   }
 }
 
-void naive_sum_all(const Stream&, const float* X, TensorView v,
+void naive_sum_all(const Stream&, const float* X, TensorView v, Accum a,
                    float* out, float*, int64_t n) {
   double acc = 0.0;
-  for (int64_t i = 0; i < n; ++i) acc += double(X[offset_of(v, i)]);
+  for (int64_t i = 0; i < n; ++i) acc += double(apply_accum(a, X[offset_of(v, i)]));
   *out = float(acc);
 }
 

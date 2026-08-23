@@ -406,12 +406,12 @@ Tensor mean_dim(const Tensor& x, int dim, bool keepdim) {
   return scalar(ScalarOp::MulScalar, sum_dim(x, d, keepdim), 1.0f / float(n));
 }
 
-Tensor sum_all(const Tensor& x) {
+Tensor sum_all(const Tensor& x, Accum a) {
   Tensor out(Shape{}, x.device(), x.dtype());
   Tensor workspace(Shape{nn::kernels::kSumAllWorkspace}, x.device(), x.dtype());
 
   const auto& k = nn::kernels::kernels(x.device());
-  k.sum_all(current_stream(x.device()), x.device_ptr(), view_of(x),
+  k.sum_all(current_stream(x.device()), x.device_ptr(), view_of(x), a,
             out.device_ptr(), workspace.device_ptr(), x.numel());
   return out;
 }
@@ -505,12 +505,16 @@ void add_inplace(Tensor& a, const Tensor& b) {
            b.device_ptr(), view_of(b), a.device_ptr(), a.numel());
 }
 
-void scale_inplace(Tensor& a, float alpha) {
-  require_contiguous(a, "scale_inplace");
+void scalar_inplace(Tensor& a, ScalarOp op, float k) {
+  require_contiguous(a, kernels::scalar_op_name(op));
 
-  const auto& k = nn::kernels::kernels(a.device());
-  k.scalar(current_stream(a.device()), ScalarOp::MulScalar, alpha,
-           a.device_ptr(), view_of(a), a.device_ptr(), a.numel());
+  const auto& kern = nn::kernels::kernels(a.device());
+  kern.scalar(current_stream(a.device()), op, k,
+              a.device_ptr(), view_of(a), a.device_ptr(), a.numel());
+}
+
+void scale_inplace(Tensor& a, float alpha) {
+  scalar_inplace(a, ScalarOp::MulScalar, alpha);
 }
 
 void axpy_inplace(Tensor& y, float alpha, const Tensor& x) {

@@ -1,5 +1,8 @@
 #pragma once
 
+#include <cmath>
+#include <span>
+#include <stdexcept>
 #include <vector>
 
 #include <nn/core/tensor.h>
@@ -7,6 +10,67 @@
 #include <nn/ops/ops.h>
 
 namespace nn::optim {
+
+namespace detail {
+
+// The gradients that exist, skipping parameters backward never reached.
+inline Tensor* grad_of(Tensor* p) {
+  AutogradMeta* m = p->meta();
+  return (m && m->grad.defined()) ? &m->grad : nullptr;
+}
+
+}  // namespace detail
+
+// The L2 norm over every gradient at once, as if they were one long vector.
+// One reduction per parameter and one host sync for the whole call.
+inline float grad_norm(std::span<Tensor* const> params) {
+  autograd::NoGradScope no_grad;
+
+  Tensor total;
+  for (Tensor* p : params) {
+    Tensor* g = detail::grad_of(p);
+    if (!g) continue;
+    Tensor sq = ops::sum_all(*g, ops::Accum::SumSq);
+    if (!total.defined()) total = std::move(sq);
+    else                  ops::add_inplace(total, sq);
+  }
+
+  return total.defined() ? std::sqrt(total.item()) : 0.0f;
+}
+
+// Scales every gradient by one common factor so their combined L2 norm is at
+// most max_norm, and returns the norm as it was before clipping.
+inline float clip_grad_norm(std::span<Tensor* const> params, float max_norm,
+                            float eps = 1e-6f) {
+  if (!(max_norm > 0.0f)) {
+    throw std::invalid_argument("clip_grad_norm: max_norm must be positive");
+  }
+  autograd::NoGradScope no_grad;
+
+  const float norm = grad_norm(params);
+  const float scale = max_norm / (norm + eps);
+  if (!std::isfinite(norm) || scale >= 1.0f) return norm;   // covers norm == 0
+
+  for (Tensor* p : params) {
+    if (Tensor* g = detail::grad_of(p)) ops::scale_inplace(*g, scale);
+  }
+  return norm;
+}
+
+// clamp each gradient element to [-value, value]
+inline void clip_grad_value(std::span<Tensor* const> params, float value) {
+  if (!(value > 0.0f)) {
+    throw std::invalid_argument("clip_grad_value: value must be positive");
+  }
+  autograd::NoGradScope no_grad;
+
+  for (Tensor* p : params) {
+    Tensor* g = detail::grad_of(p);
+    if (!g) continue;
+    ops::scalar_inplace(*g, ops::ScalarOp::ClampMin, -value);
+    ops::scalar_inplace(*g, ops::ScalarOp::ClampMax,  value);
+  }
+}
 
 class Optimizer {
 public:

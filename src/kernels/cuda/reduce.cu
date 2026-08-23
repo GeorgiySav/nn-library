@@ -43,12 +43,12 @@ namespace {
 constexpr int kSumBlock = 256;
 
 __global__ void sum_partials_kernel(const float* __restrict__ X, TensorView v,
-                                    float* partials, int64_t n) {
+                                    Accum a, float* partials, int64_t n) {
   float acc = 0.0f;
   for (int64_t i = blockIdx.x * int64_t(blockDim.x) + threadIdx.x;
        i < n;
        i += int64_t(gridDim.x) * blockDim.x) {
-    acc += X[offset_of(v, i)];
+    acc += apply_accum(a, X[offset_of(v, i)]);
   }
   acc = block_reduce(acc, Plus(), 0.0f);
   if (threadIdx.x == 0) partials[blockIdx.x] = acc;
@@ -89,15 +89,15 @@ void cuda_sum_to(const Stream& s, const float* g, TensorView keep, TensorView re
 }
 
 // Two kernels over a fixed grid rather than one with atomicAdd
-void cuda_sum_all(const Stream& s, const float* X, TensorView v, float* out,
-                  float* workspace, int64_t n) {
+void cuda_sum_all(const Stream& s, const float* X, TensorView v, Accum a,
+                  float* out, float* workspace, int64_t n) {
   auto stream = static_cast<cudaStream_t>(s.handle);
   if (n == 0) {
     NN_CUDA_CHECK(cudaMemsetAsync(out, 0, sizeof(float), stream));
     return;
   }
 
-  sum_partials_kernel<<<kSumAllWorkspace, kSumBlock, 0, stream>>>(X, v, workspace, n);
+  sum_partials_kernel<<<kSumAllWorkspace, kSumBlock, 0, stream>>>(X, v, a, workspace, n);
   sum_finish_kernel<<<1, 1024, 0, stream>>>(workspace, out, kSumAllWorkspace);
   NN_CUDA_CHECK_LAUNCH(stream);
 }

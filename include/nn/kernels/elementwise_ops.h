@@ -32,6 +32,17 @@ enum class ScalarOp : int {
 #undef NN_SCALAR
 };
 
+enum class Accum : int { Sum, SumSq, SumAbs };
+
+NN_EW_INLINE float apply_accum(Accum a, float x) {
+  switch (a) {
+    case Accum::SumSq:  return x * x;
+    case Accum::SumAbs: return fabsf(x);
+    case Accum::Sum:    break;
+  }
+  return x;
+}
+
 NN_EW_INLINE float apply_unary(UnaryOp op, float x) {
   switch (op) {
 #define NN_UNARY(Name, method, fwd, bwd) case UnaryOp::Name: return (fwd);
