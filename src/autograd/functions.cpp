@@ -37,9 +37,17 @@ void record_op(Tensor& out,
 Tensor unary(ops::UnaryOp op, const Tensor& x) {
   Tensor out = ops::unary(op, x);
 
+  // Keep alive only whichever of x, out the derivative actually reads (see
+  // unary_ops.def's Needs column). Almost every unary op reads at most one --
+  // capturing both unconditionally, as this used to, holds every activation
+  // in the network twice as long as its own backward needs, for nothing.
+  const kernels::UnaryNeeds needs = kernels::unary_needs(op);
+  Tensor saved_x = kernels::needs_x(needs) ? x   : Tensor{};
+  Tensor saved_y = kernels::needs_y(needs) ? out : Tensor{};
+
   record_op(out, kernels::unary_op_name(op),
-    [op, x, out](const Tensor& g, std::span<Tensor> g_in) {
-      g_in[0] = ops::unary_backward(op, x, out, g);
+    [op, saved_x, saved_y](const Tensor& g, std::span<Tensor> g_in) {
+      g_in[0] = ops::unary_backward(op, saved_x, saved_y, g);
     }, x);
 
   return out;
@@ -69,7 +77,7 @@ Tensor scalar(ops::ScalarOp op, const Tensor& x, float k) {
 }
 
 // The named wrappers, generated from the same lists as the kernels.
-#define NN_UNARY(Name, method, fwd, bwd) \
+#define NN_UNARY(Name, method, fwd, bwd, needs) \
   Tensor method(const Tensor& x) { return unary(ops::UnaryOp::Name, x); }
 #include <nn/kernels/unary_ops.def>
 #undef NN_UNARY
@@ -429,7 +437,7 @@ Tensor masked_fill(const Tensor& x, const Tensor& mask, float value) {
 
 namespace nn {
 
-#define NN_UNARY(Name, method, fwd, bwd) \
+#define NN_UNARY(Name, method, fwd, bwd, needs) \
   Tensor Tensor::method() const { return autograd::unary(kernels::UnaryOp::Name, *this); }
 #include <nn/kernels/unary_ops.def>
 #undef NN_UNARY

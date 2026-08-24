@@ -15,10 +15,28 @@
 namespace nn::kernels {
 
 enum class UnaryOp : int {
-#define NN_UNARY(Name, method, fwd, bwd) Name,
+#define NN_UNARY(Name, method, fwd, bwd, needs) Name,
 #include <nn/kernels/unary_ops.def>
 #undef NN_UNARY
 };
+
+// Which of a unary op's forward input (x) and forward output (y) its backward
+// column actually reads, from unary_ops.def's Needs column. A bitmask so a
+// future op needing both stays representable, though nothing today does.
+enum class UnaryNeeds : uint8_t { None = 0, X = 1, Y = 2, Both = 3 };
+inline bool needs_x(UnaryNeeds n) { return (uint8_t(n) & uint8_t(UnaryNeeds::X)) != 0; }
+inline bool needs_y(UnaryNeeds n) { return (uint8_t(n) & uint8_t(UnaryNeeds::Y)) != 0; }
+
+// Host-side only: this decides what a Tensor closure keeps alive and what a
+// kernel driver reads before launch, neither of which happens on the device.
+inline UnaryNeeds unary_needs(UnaryOp op) {
+  switch (op) {
+#define NN_UNARY(Name, method, fwd, bwd, needs) case UnaryOp::Name: return UnaryNeeds::needs;
+#include <nn/kernels/unary_ops.def>
+#undef NN_UNARY
+  }
+  return UnaryNeeds::Both;   // unknown op: keep everything rather than drop a gradient
+}
 
 enum class BinaryOp : int {
 #define NN_BINARY(Name, method, fwd, da, db) Name,
@@ -45,7 +63,7 @@ NN_EW_INLINE float apply_accum(Accum a, float x) {
 
 NN_EW_INLINE float apply_unary(UnaryOp op, float x) {
   switch (op) {
-#define NN_UNARY(Name, method, fwd, bwd) case UnaryOp::Name: return (fwd);
+#define NN_UNARY(Name, method, fwd, bwd, needs) case UnaryOp::Name: return (fwd);
 #include <nn/kernels/unary_ops.def>
 #undef NN_UNARY
   }
@@ -53,9 +71,12 @@ NN_EW_INLINE float apply_unary(UnaryOp op, float x) {
 }
 
 // y is the forward result and g the incoming gradient; see unary_ops.def.
+// Callers that already know this op's Needs (autograd::unary, the backward
+// kernel drivers) may pass 0.0f for whichever of x/y this op does not read --
+// that placeholder value never reaches the switch's chosen case.
 NN_EW_INLINE float apply_unary_backward(UnaryOp op, float x, float y, float g) {
   switch (op) {
-#define NN_UNARY(Name, method, fwd, bwd) case UnaryOp::Name: return (bwd);
+#define NN_UNARY(Name, method, fwd, bwd, needs) case UnaryOp::Name: return (bwd);
 #include <nn/kernels/unary_ops.def>
 #undef NN_UNARY
   }
@@ -111,7 +132,7 @@ NN_EW_INLINE float apply_scalar_backward(ScalarOp op, float x, float y, float g,
 // Names, for error messages and tests. Indexed by the enum's value.
 inline const char* unary_op_name(UnaryOp op) {
   switch (op) {
-#define NN_UNARY(Name, method, fwd, bwd) case UnaryOp::Name: return #method;
+#define NN_UNARY(Name, method, fwd, bwd, needs) case UnaryOp::Name: return #method;
 #include <nn/kernels/unary_ops.def>
 #undef NN_UNARY
   }
@@ -135,7 +156,7 @@ inline const char* scalar_op_name(ScalarOp op) {
 }
 
 inline constexpr int kUnaryOpCount = 0
-#define NN_UNARY(Name, method, fwd, bwd) + 1
+#define NN_UNARY(Name, method, fwd, bwd, needs) + 1
 #include <nn/kernels/unary_ops.def>
 #undef NN_UNARY
     ;

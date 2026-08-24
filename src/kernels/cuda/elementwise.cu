@@ -36,16 +36,22 @@ __global__ void unary_kernel(UnaryOp op, const float* X, TensorView vx,
   }
 }
 
+// X/Y may be null with a degenerate view when this op's derivative does not
+// read that side (see unary_needs) -- the caller may have kept nothing else
+// alive for it, so needs_x/needs_y (computed once, host-side, before launch)
+// gate every dereference rather than trusting the pointer to be valid.
 __global__ void unary_backward_kernel(UnaryOp op,
                                       const float* __restrict__ X, TensorView vx,
                                       const float* __restrict__ Y, TensorView vy,
                                       const float* __restrict__ G, TensorView vg,
-                                      float* __restrict__ gX, int64_t n) {
+                                      float* __restrict__ gX,
+                                      bool needs_x, bool needs_y, int64_t n) {
   for (int64_t i = blockIdx.x * int64_t(blockDim.x) + threadIdx.x;
        i < n;
        i += int64_t(gridDim.x) * blockDim.x) {
-    gX[i] = apply_unary_backward(op, X[offset_of(vx, i)], Y[offset_of(vy, i)],
-                                 G[offset_of(vg, i)]);
+    const float xv = needs_x ? X[offset_of(vx, i)] : 0.0f;
+    const float yv = needs_y ? Y[offset_of(vy, i)] : 0.0f;
+    gX[i] = apply_unary_backward(op, xv, yv, G[offset_of(vg, i)]);
   }
 }
 
@@ -160,7 +166,9 @@ void cuda_unary_backward(const Stream& s, UnaryOp op,
                          const float* Y, TensorView vy,
                          const float* G, TensorView vg,
                          float* gX, int64_t n) {
-  launch_elementwise(s, n, unary_backward_kernel, op, X, vx, Y, vy, G, vg, gX);
+  const UnaryNeeds needs = unary_needs(op);
+  launch_elementwise(s, n, unary_backward_kernel, op, X, vx, Y, vy, G, vg, gX,
+                     needs_x(needs), needs_y(needs));
 }
 void cuda_binary(const Stream& s, BinaryOp op,
                  const float* A, TensorView va,

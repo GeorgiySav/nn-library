@@ -99,7 +99,7 @@ public:
   // elementwise ones are generated from the same three lists the kernels are:
   // adding a line to unary_ops.def adds the kernel, the autograd node, the
   // free function and this method at once.
-#define NN_UNARY(Name, method, fwd, bwd) Tensor method() const;
+#define NN_UNARY(Name, method, fwd, bwd, needs) Tensor method() const;
 #include <nn/kernels/unary_ops.def>
 #undef NN_UNARY
 

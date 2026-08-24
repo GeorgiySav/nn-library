@@ -19,9 +19,15 @@ void naive_unary_backward(const Stream&, UnaryOp op,
                           const float* Y, TensorView vy,
                           const float* G, TensorView vg,
                           float* gX, int64_t n) {
+  // X/Y may be null with a degenerate view when this op's derivative does not
+  // read that side (see unary_needs) -- the caller may have kept nothing else
+  // alive for it, so it must not be dereferenced.
+  const UnaryNeeds needs = unary_needs(op);
+  const bool nx = needs_x(needs), ny = needs_y(needs);
   for (int64_t i = 0; i < n; ++i) {
-    gX[i] = apply_unary_backward(op, X[offset_of(vx, i)], Y[offset_of(vy, i)],
-                                 G[offset_of(vg, i)]);
+    const float xv = nx ? X[offset_of(vx, i)] : 0.0f;
+    const float yv = ny ? Y[offset_of(vy, i)] : 0.0f;
+    gX[i] = apply_unary_backward(op, xv, yv, G[offset_of(vg, i)]);
   }
 }
 

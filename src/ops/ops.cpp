@@ -252,15 +252,28 @@ Tensor unary(UnaryOp op, const Tensor& x) {
 }
 
 Tensor unary_backward(UnaryOp op, const Tensor& x, const Tensor& y, const Tensor& g) {
-  same_device(x, g, "unary_backward");
-  same_shape(x, y, kernels::unary_op_name(op));
-  same_shape(x, g, kernels::unary_op_name(op));
+  // x is the forward input and y the forward output; unary_ops.def's Needs
+  // column says which (if either) this op's derivative reads, and the only
+  // caller -- autograd::unary -- passes an undefined placeholder for the one
+  // it did not keep alive. g always carries the true shape, device and dtype:
+  // a unary op never changes any of them, so it is the one side we can always
+  // trust even when both x and y are placeholders (Neg, Sign).
+  if (x.defined()) {
+    same_device(x, g, kernels::unary_op_name(op));
+    same_shape(x, g, kernels::unary_op_name(op));
+  }
+  if (y.defined()) {
+    same_device(y, g, kernels::unary_op_name(op));
+    same_shape(y, g, kernels::unary_op_name(op));
+  }
 
-  Tensor gx(x.shape(), x.device(), x.dtype());
-  const auto& k = nn::kernels::kernels(x.device());
-  k.unary_backward(current_stream(x.device()), op,
-                   x.device_ptr(), view_of(x),
-                   y.device_ptr(), view_of(y),
+  Tensor gx(g.shape(), g.device(), g.dtype());
+  const auto& k = nn::kernels::kernels(g.device());
+  k.unary_backward(current_stream(g.device()), op,
+                   x.defined() ? x.device_ptr() : nullptr,
+                   x.defined() ? view_of(x) : TensorView{},
+                   y.defined() ? y.device_ptr() : nullptr,
+                   y.defined() ? view_of(y) : TensorView{},
                    g.device_ptr(), view_of(g),
                    gx.device_ptr(), gx.numel());
   return gx;
