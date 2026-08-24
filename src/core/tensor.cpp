@@ -89,6 +89,30 @@ Tensor Tensor::from_i32(std::initializer_list<int32_t> values, Device d, DType t
                   Shape({static_cast<int>(values.size())}), d, t);
 }
 
+Tensor Tensor::arange(int64_t n, Device d, DType t) {
+  if (n < 0) {
+    throw std::invalid_argument("arange: n must not be negative, got " + std::to_string(n));
+  }
+  if (n > INT32_MAX) {
+    throw std::invalid_argument("arange: " + std::to_string(n) + " is too large for one axis");
+  }
+
+  Tensor h(Shape({int(n)}), Device::CPU, t);
+  switch (t) {
+    case DType::I32: {
+      int32_t* data = h.host_data_i32();
+      for (int64_t i = 0; i < n; ++i) data[i] = int32_t(i);
+      break;
+    }
+    case DType::F32: {
+      float* data = h.host_data();
+      for (int64_t i = 0; i < n; ++i) data[i] = float(i);
+      break;
+    }
+  }
+  return h.to(d);
+}
+
 Tensor Tensor::view_like(const Shape& s, const Strides& strides, int64_t offset) const {
   Tensor v;
   v.storage_ = storage_;
@@ -305,6 +329,19 @@ TensorView view_of(const Tensor& t) {
     ++v.rank;
   }
   return v;
+}
+
+Tensor tril_mask(int n, Device d) {
+  if (n < 0) {
+    throw std::invalid_argument("tril_mask: n must not be negative, got " + std::to_string(n));
+  }
+
+  Tensor h(Shape({n, n}), Device::CPU, DType::F32);
+  float* data = h.host_data();
+  for (int i = 0; i < n; ++i) {
+    for (int j = 0; j < n; ++j) data[size_t(i) * n + j] = (j <= i) ? 1.0f : 0.0f;
+  }
+  return h.to(d);
 }
 
 }

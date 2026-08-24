@@ -31,6 +31,9 @@ public:
   static Tensor from(std::span<const float> values, Shape s, Device d = Device::CPU, DType t = DType::F32);
   static Tensor from_i32(std::span<const int32_t> values, Shape s, Device d = Device::CPU, DType t = DType::I32);
 
+  // [0, 1, ..., n-1], rank 1.
+  static Tensor arange(int64_t n, Device d = Device::CPU, DType t = DType::I32);
+
   Tensor view_like(const Shape& s, const Strides&, int64_t offset) const;
 
   const Shape& shape() const { return shape_; }
@@ -137,6 +140,8 @@ private:
 };
 
 TensorView view_of(const Tensor& t);
+
+Tensor tril_mask(int n, Device d = Device::CPU);
 
 // Operators, so an expression reads left to right instead of inside out.
 // All of them are differentiable; the float forms avoid allocating and
