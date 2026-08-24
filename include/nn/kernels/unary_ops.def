@@ -1,49 +1,23 @@
-// One line per elementwise unary op. Everything else -- the enum, both
-// backends' arithmetic, the ops:: entry point, the autograd node and the
-// Tensor method -- is generated or written once against the enum.
+// One line per elementwise unary op: just its enum name and its spelling as
+// a method/free function (x.method(), autograd::method(x)).
 //
-//   NN_UNARY(Name, method, forward(x), backward(x, y, g), Needs)
+//   NN_UNARY(Name, method)
 //
-// `y` in the backward column is the forward result, `g` the incoming gradient.
-// Prefer `y` where the derivative can be written in terms of it: the backward
-// kernel already has it loaded, and reusing it avoids recomputing a transcendental.
-//
-// Needs says which of x, y the backward column actually reads: None, X, Y or
-// Both. It decides two things -- what autograd::unary keeps alive until this
-// node's backward runs, and what the backward kernel actually reads off the
-// strided view. Get it wrong in the understating direction and the wrong
-// value goes into the gradient; get it wrong the other way and an activation
-// is retained (and read from memory) for nothing. test_elementwise_ops.cpp
-// probes every row's real dependency against this column directly, so a
-// mismatch fails a test rather than shipping.
-//
-// Commas inside a call's parentheses are safe -- only top-level commas separate
-// macro arguments.
+// This list's only job is naming -- the enum, the name-lookup table, the op
+// count, and the wrapper declarations/definitions in autograd/functions.h,
+// core/tensor.h, autograd/functions.cpp and test_elementwise_ops.cpp all
+// come from it, and none of those files ever look at an op's math.
 
-NN_UNARY(Neg,     neg,     -x,                       -g,                        None)
-NN_UNARY(Abs,     abs,     fabsf(x),                 x < 0.0f ? -g : g,         X)
-NN_UNARY(Sign,    sign,    float((x > 0.0f) - (x < 0.0f)), 0.0f * g,            None)
-NN_UNARY(Relu,    relu,    fmaxf(x, 0.0f),           x > 0.0f ? g : 0.0f,       X)
-NN_UNARY(Exp,     exp,     expf(x),                  g * y,                    Y)
-NN_UNARY(Log,     log,     logf(x),                  g / x,                    X)
-NN_UNARY(Sqrt,    sqrt,    sqrtf(x),                 g * 0.5f / y,             Y)
-NN_UNARY(Rsqrt,   rsqrt,   1.0f / sqrtf(x),          -0.5f * g * y * y * y,     Y)
-NN_UNARY(Recip,   recip,   1.0f / x,                 -g * y * y,                Y)
-NN_UNARY(Tanh,    tanh,    tanhf(x),                 g * (1.0f - y * y),        Y)
-NN_UNARY(Sigmoid, sigmoid, 1.0f / (1.0f + expf(-x)), g * y * (1.0f - y),        Y)
-
-// Exact GELU, not the tanh approximation: erff is available on both backends
-// and costs about the same, so there is no reason to carry the approximation's
-// error. d/dx = Phi(x) + x * phi(x).
-NN_UNARY(Gelu,    gelu,    0.5f * x * (1.0f + erff(x * 0.70710678118654752f)),
-                           g * (0.5f * (1.0f + erff(x * 0.70710678118654752f)) +
-                                x * 0.39894228040143268f * expf(-0.5f * x * x)),
-                           X)
-
-// x * sigmoid(x). The two expf calls are the same expression with no side
-// effects, so the compiler folds them into one; writing it this way keeps the
-// derivative in terms of x, which y = x*sigmoid(x) cannot give back at x = 0.
-NN_UNARY(Silu,    silu,    x / (1.0f + expf(-x)),
-                           g * (1.0f + x * (1.0f - 1.0f / (1.0f + expf(-x)))) /
-                               (1.0f + expf(-x)),
-                           X)
+NN_UNARY(Neg,     neg)
+NN_UNARY(Abs,     abs)
+NN_UNARY(Sign,    sign)
+NN_UNARY(Relu,    relu)
+NN_UNARY(Exp,     exp)
+NN_UNARY(Log,     log)
+NN_UNARY(Sqrt,    sqrt)
+NN_UNARY(Rsqrt,   rsqrt)
+NN_UNARY(Recip,   recip)
+NN_UNARY(Tanh,    tanh)
+NN_UNARY(Sigmoid, sigmoid)
+NN_UNARY(Gelu,    gelu)
+NN_UNARY(Silu,    silu)

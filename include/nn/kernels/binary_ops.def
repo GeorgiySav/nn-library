@@ -1,16 +1,12 @@
-// One line per elementwise binary op; see unary_ops.def for the mechanism.
+// One line per elementwise binary op: just its enum name and its spelling as
+// a method/free function.
 //
-//   NN_BINARY(Name, method, forward(a, b), d/da(a, b, c, g), d/db(a, b, c, g))
-//
-// `c` is the forward result. Both operands are broadcast to a common shape
-// before the kernel runs, so the two derivative columns produce gradients of
-// the broadcast shape; ops::binary_backward sums them back down.
+//   NN_BINARY(Name, method)
 
-NN_BINARY(Add,     add,     a + b,       g,                          g)
-NN_BINARY(Sub,     sub,     a - b,       g,                          -g)
-NN_BINARY(Mul,     mul,     a * b,       g * b,                      g * a)
-// d/db of a/b is -a/b^2, which is -c/b -- one fewer division and one fewer read.
-NN_BINARY(Div,     div,     a / b,       g / b,                      -g * c / b)
-NN_BINARY(Pow,     pow,     powf(a, b),  g * b * powf(a, b - 1.0f),  g * c * logf(a))
-NN_BINARY(Maximum, maximum, fmaxf(a, b), a >= b ? g : 0.0f,          a >= b ? 0.0f : g)
-NN_BINARY(Minimum, minimum, fminf(a, b), a <= b ? g : 0.0f,          a <= b ? 0.0f : g)
+NN_BINARY(Add,     add)
+NN_BINARY(Sub,     sub)
+NN_BINARY(Mul,     mul)
+NN_BINARY(Div,     div)
+NN_BINARY(Pow,     pow)
+NN_BINARY(Maximum, maximum)
+NN_BINARY(Minimum, minimum)

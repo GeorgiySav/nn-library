@@ -1,23 +1,26 @@
-// One line per "tensor combined with a host float" op; see unary_ops.def.
+// One line per "tensor combined with a host float" op: just its enum name
+// and its spelling as a method/free function. See unary_ops.def for why this
+// row shape (Name, method) never needs another column -- the math lives in
+// scalar_ops_traits.h.
 //
-//   NN_SCALAR(Name, method, forward(x, k), backward(x, y, g, k))
+//   NN_SCALAR(Name, method)
 //
 // These exist so that `x * 2.0f` does not have to allocate a one-element tensor,
 // copy it to the device and broadcast it. Ops whose scalar form is just another
 // scalar op are not listed: x - k is AddScalar(-k), x / k is MulScalar(1/k).
 
-NN_SCALAR(AddScalar,  add_scalar,  x + k,         g)
-NN_SCALAR(MulScalar,  mul_scalar,  x * k,         g * k)
-NN_SCALAR(RsubScalar, rsub_scalar, k - x,         -g)
-NN_SCALAR(RdivScalar, rdiv_scalar, k / x,         -g * y / x)
-NN_SCALAR(PowScalar,  pow_scalar,  powf(x, k),    g * k * powf(x, k - 1.0f))
-NN_SCALAR(ClampMin,   clamp_min,   fmaxf(x, k),   x > k ? g : 0.0f)
-NN_SCALAR(ClampMax,   clamp_max,   fminf(x, k),   x < k ? g : 0.0f)
+NN_SCALAR(AddScalar,  add_scalar)
+NN_SCALAR(MulScalar,  mul_scalar)
+NN_SCALAR(RsubScalar, rsub_scalar)
+NN_SCALAR(RdivScalar, rdiv_scalar)
+NN_SCALAR(PowScalar,  pow_scalar)
+NN_SCALAR(ClampMin,   clamp_min)
+NN_SCALAR(ClampMax,   clamp_max)
 
 // Predicates, for building masks. They are a step function, so the gradient
 // through them is zero everywhere it is defined.
-NN_SCALAR(GtScalar,   gt,          float(x > k),  0.0f * g)
-NN_SCALAR(GeScalar,   ge,          float(x >= k), 0.0f * g)
-NN_SCALAR(LtScalar,   lt,          float(x < k),  0.0f * g)
-NN_SCALAR(LeScalar,   le,          float(x <= k), 0.0f * g)
-NN_SCALAR(EqScalar,   eq,          float(x == k), 0.0f * g)
+NN_SCALAR(GtScalar,   gt)
+NN_SCALAR(GeScalar,   ge)
+NN_SCALAR(LtScalar,   lt)
+NN_SCALAR(LeScalar,   le)
+NN_SCALAR(EqScalar,   eq)

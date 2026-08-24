@@ -9,15 +9,15 @@ Tensor unary(ops::UnaryOp op, const Tensor& x);
 Tensor binary(ops::BinaryOp op, const Tensor& a, const Tensor& b);
 Tensor scalar(ops::ScalarOp op, const Tensor& x, float k);
 
-#define NN_UNARY(Name, method, fwd, bwd, needs) Tensor method(const Tensor& x);
+#define NN_UNARY(Name, method) Tensor method(const Tensor& x);
 #include <nn/kernels/unary_ops.def>
 #undef NN_UNARY
 
-#define NN_BINARY(Name, method, fwd, da, db) Tensor method(const Tensor& a, const Tensor& b);
+#define NN_BINARY(Name, method) Tensor method(const Tensor& a, const Tensor& b);
 #include <nn/kernels/binary_ops.def>
 #undef NN_BINARY
 
-#define NN_SCALAR(Name, method, fwd, bwd) Tensor method(const Tensor& x, float k);
+#define NN_SCALAR(Name, method) Tensor method(const Tensor& x, float k);
 #include <nn/kernels/scalar_ops.def>
 #undef NN_SCALAR
 

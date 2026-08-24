@@ -1,54 +1,16 @@
 #pragma once
 
-// The arithmetic of every elementwise op, in one place, compiled into both
-// backends. The naive backend includes this as host code and the CUDA backend
-// as __host__ __device__ code, so the two can never disagree about what `gelu`
-// means -- there is only one expression.
+// The arithmetic of every elementwise op lives one struct per op in
+// unary_ops_traits.h / binary_ops_traits.h / scalar_ops_traits.h, each
+// compiled into both backends via NN_EW_INLINE.
 
-#if defined(__CUDACC__)
-#  define NN_EW_INLINE __host__ __device__ inline
-#else
-#  include <cmath>
-#  define NN_EW_INLINE inline
-#endif
+#include <nn/kernels/ew_inline.h>
+#include <nn/kernels/elementwise_op_enums.h>
+#include <nn/kernels/unary_ops_traits.h>
+#include <nn/kernels/binary_ops_traits.h>
+#include <nn/kernels/scalar_ops_traits.h>
 
 namespace nn::kernels {
-
-enum class UnaryOp : int {
-#define NN_UNARY(Name, method, fwd, bwd, needs) Name,
-#include <nn/kernels/unary_ops.def>
-#undef NN_UNARY
-};
-
-// Which of a unary op's forward input (x) and forward output (y) its backward
-// column actually reads, from unary_ops.def's Needs column. A bitmask so a
-// future op needing both stays representable, though nothing today does.
-enum class UnaryNeeds : uint8_t { None = 0, X = 1, Y = 2, Both = 3 };
-inline bool needs_x(UnaryNeeds n) { return (uint8_t(n) & uint8_t(UnaryNeeds::X)) != 0; }
-inline bool needs_y(UnaryNeeds n) { return (uint8_t(n) & uint8_t(UnaryNeeds::Y)) != 0; }
-
-// Host-side only: this decides what a Tensor closure keeps alive and what a
-// kernel driver reads before launch, neither of which happens on the device.
-inline UnaryNeeds unary_needs(UnaryOp op) {
-  switch (op) {
-#define NN_UNARY(Name, method, fwd, bwd, needs) case UnaryOp::Name: return UnaryNeeds::needs;
-#include <nn/kernels/unary_ops.def>
-#undef NN_UNARY
-  }
-  return UnaryNeeds::Both;   // unknown op: keep everything rather than drop a gradient
-}
-
-enum class BinaryOp : int {
-#define NN_BINARY(Name, method, fwd, da, db) Name,
-#include <nn/kernels/binary_ops.def>
-#undef NN_BINARY
-};
-
-enum class ScalarOp : int {
-#define NN_SCALAR(Name, method, fwd, bwd) Name,
-#include <nn/kernels/scalar_ops.def>
-#undef NN_SCALAR
-};
 
 enum class Accum : int { Sum, SumSq, SumAbs };
 
@@ -62,77 +24,45 @@ NN_EW_INLINE float apply_accum(Accum a, float x) {
 }
 
 NN_EW_INLINE float apply_unary(UnaryOp op, float x) {
-  switch (op) {
-#define NN_UNARY(Name, method, fwd, bwd, needs) case UnaryOp::Name: return (fwd);
-#include <nn/kernels/unary_ops.def>
-#undef NN_UNARY
-  }
-  return 0.0f;
+  return unary_ops::All::fwd(op, x);
 }
 
-// y is the forward result and g the incoming gradient; see unary_ops.def.
-// Callers that already know this op's Needs (autograd::unary, the backward
-// kernel drivers) may pass 0.0f for whichever of x/y this op does not read --
-// that placeholder value never reaches the switch's chosen case.
+// y is the forward result and g the incoming gradient. Callers that already
+// know this op's Needs (autograd::unary, the backward kernel drivers) may
+// pass 0.0f for whichever of x/y this op does not read.
 NN_EW_INLINE float apply_unary_backward(UnaryOp op, float x, float y, float g) {
-  switch (op) {
-#define NN_UNARY(Name, method, fwd, bwd, needs) case UnaryOp::Name: return (bwd);
-#include <nn/kernels/unary_ops.def>
-#undef NN_UNARY
-  }
-  return 0.0f;
+  return unary_ops::All::bwd(op, x, y, g);
+}
+
+// Host-side only: this decides what a Tensor closure keeps alive and what a
+// kernel driver reads before launch, neither of which happens on the device.
+inline UnaryNeeds unary_needs(UnaryOp op) {
+  return unary_ops::All::needs(op);
 }
 
 NN_EW_INLINE float apply_binary(BinaryOp op, float a, float b) {
-  switch (op) {
-#define NN_BINARY(Name, method, fwd, da, db) case BinaryOp::Name: return (fwd);
-#include <nn/kernels/binary_ops.def>
-#undef NN_BINARY
-  }
-  return 0.0f;
+  return binary_ops::All::fwd(op, a, b);
 }
 
 // side 0 -> d/da, side 1 -> d/db. c is the forward result.
 NN_EW_INLINE float apply_binary_backward(BinaryOp op, int side,
                                          float a, float b, float c, float g) {
-  if (side == 0) {
-    switch (op) {
-#define NN_BINARY(Name, method, fwd, da, db) case BinaryOp::Name: return (da);
-#include <nn/kernels/binary_ops.def>
-#undef NN_BINARY
-    }
-  } else {
-    switch (op) {
-#define NN_BINARY(Name, method, fwd, da, db) case BinaryOp::Name: return (db);
-#include <nn/kernels/binary_ops.def>
-#undef NN_BINARY
-    }
-  }
-  return 0.0f;
+  return side == 0 ? binary_ops::All::dfda(op, a, b, c, g)
+                   : binary_ops::All::dfdb(op, a, b, c, g);
 }
 
 NN_EW_INLINE float apply_scalar(ScalarOp op, float x, float k) {
-  switch (op) {
-#define NN_SCALAR(Name, method, fwd, bwd) case ScalarOp::Name: return (fwd);
-#include <nn/kernels/scalar_ops.def>
-#undef NN_SCALAR
-  }
-  return 0.0f;
+  return scalar_ops::All::fwd(op, x, k);
 }
 
 NN_EW_INLINE float apply_scalar_backward(ScalarOp op, float x, float y, float g, float k) {
-  switch (op) {
-#define NN_SCALAR(Name, method, fwd, bwd) case ScalarOp::Name: return (bwd);
-#include <nn/kernels/scalar_ops.def>
-#undef NN_SCALAR
-  }
-  return 0.0f;
+  return scalar_ops::All::bwd(op, x, y, g, k);
 }
 
 // Names, for error messages and tests. Indexed by the enum's value.
 inline const char* unary_op_name(UnaryOp op) {
   switch (op) {
-#define NN_UNARY(Name, method, fwd, bwd, needs) case UnaryOp::Name: return #method;
+#define NN_UNARY(Name, method) case UnaryOp::Name: return #method;
 #include <nn/kernels/unary_ops.def>
 #undef NN_UNARY
   }
@@ -140,7 +70,7 @@ inline const char* unary_op_name(UnaryOp op) {
 }
 inline const char* binary_op_name(BinaryOp op) {
   switch (op) {
-#define NN_BINARY(Name, method, fwd, da, db) case BinaryOp::Name: return #method;
+#define NN_BINARY(Name, method) case BinaryOp::Name: return #method;
 #include <nn/kernels/binary_ops.def>
 #undef NN_BINARY
   }
@@ -148,7 +78,7 @@ inline const char* binary_op_name(BinaryOp op) {
 }
 inline const char* scalar_op_name(ScalarOp op) {
   switch (op) {
-#define NN_SCALAR(Name, method, fwd, bwd) case ScalarOp::Name: return #method;
+#define NN_SCALAR(Name, method) case ScalarOp::Name: return #method;
 #include <nn/kernels/scalar_ops.def>
 #undef NN_SCALAR
   }
@@ -156,19 +86,26 @@ inline const char* scalar_op_name(ScalarOp op) {
 }
 
 inline constexpr int kUnaryOpCount = 0
-#define NN_UNARY(Name, method, fwd, bwd, needs) + 1
+#define NN_UNARY(Name, method) + 1
 #include <nn/kernels/unary_ops.def>
 #undef NN_UNARY
     ;
 inline constexpr int kBinaryOpCount = 0
-#define NN_BINARY(Name, method, fwd, da, db) + 1
+#define NN_BINARY(Name, method) + 1
 #include <nn/kernels/binary_ops.def>
 #undef NN_BINARY
     ;
 inline constexpr int kScalarOpCount = 0
-#define NN_SCALAR(Name, method, fwd, bwd) + 1
+#define NN_SCALAR(Name, method) + 1
 #include <nn/kernels/scalar_ops.def>
 #undef NN_SCALAR
     ;
+
+static_assert(unary_ops::All::kSize == kUnaryOpCount,
+              "unary_ops.def and unary_ops_traits.h::All must list exactly the same ops");
+static_assert(binary_ops::All::kSize == kBinaryOpCount,
+              "binary_ops.def and binary_ops_traits.h::All must list exactly the same ops");
+static_assert(scalar_ops::All::kSize == kScalarOpCount,
+              "scalar_ops.def and scalar_ops_traits.h::All must list exactly the same ops");
 
 }  // namespace nn::kernels

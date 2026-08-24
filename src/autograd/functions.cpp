@@ -77,17 +77,17 @@ Tensor scalar(ops::ScalarOp op, const Tensor& x, float k) {
 }
 
 // The named wrappers, generated from the same lists as the kernels.
-#define NN_UNARY(Name, method, fwd, bwd, needs) \
+#define NN_UNARY(Name, method) \
   Tensor method(const Tensor& x) { return unary(ops::UnaryOp::Name, x); }
 #include <nn/kernels/unary_ops.def>
 #undef NN_UNARY
 
-#define NN_BINARY(Name, method, fwd, da, db) \
+#define NN_BINARY(Name, method) \
   Tensor method(const Tensor& a, const Tensor& b) { return binary(ops::BinaryOp::Name, a, b); }
 #include <nn/kernels/binary_ops.def>
 #undef NN_BINARY
 
-#define NN_SCALAR(Name, method, fwd, bwd) \
+#define NN_SCALAR(Name, method) \
   Tensor method(const Tensor& x, float k) { return scalar(ops::ScalarOp::Name, x, k); }
 #include <nn/kernels/scalar_ops.def>
 #undef NN_SCALAR
@@ -437,18 +437,18 @@ Tensor masked_fill(const Tensor& x, const Tensor& mask, float value) {
 
 namespace nn {
 
-#define NN_UNARY(Name, method, fwd, bwd, needs) \
+#define NN_UNARY(Name, method) \
   Tensor Tensor::method() const { return autograd::unary(kernels::UnaryOp::Name, *this); }
 #include <nn/kernels/unary_ops.def>
 #undef NN_UNARY
 
-#define NN_BINARY(Name, method, fwd, da, db)                     \
+#define NN_BINARY(Name, method)                                  \
   Tensor Tensor::method(const Tensor& other) const {             \
     return autograd::binary(kernels::BinaryOp::Name, *this, other); }
 #include <nn/kernels/binary_ops.def>
 #undef NN_BINARY
 
-#define NN_SCALAR(Name, method, fwd, bwd) \
+#define NN_SCALAR(Name, method) \
   Tensor Tensor::method(float k) const { return autograd::scalar(kernels::ScalarOp::Name, *this, k); }
 #include <nn/kernels/scalar_ops.def>
 #undef NN_SCALAR

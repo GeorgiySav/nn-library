@@ -16,24 +16,24 @@ using nn::kernels::BinaryOp;
 using nn::kernels::ScalarOp;
 using nn::kernels::UnaryOp;
 
-struct UnaryCase { UnaryOp op; const char* name; nn::kernels::UnaryNeeds needs; };
+struct UnaryCase { UnaryOp op; const char* name; };
 struct BinaryCase { BinaryOp op; const char* name; };
 struct ScalarCase { ScalarOp op; const char* name; };
 
 const UnaryCase kUnaryOps[] = {
-#define NN_UNARY(Name, method, fwd, bwd, needs) {UnaryOp::Name, #method, nn::kernels::UnaryNeeds::needs},
+#define NN_UNARY(Name, method) {UnaryOp::Name, #method},
 #include <nn/kernels/unary_ops.def>
 #undef NN_UNARY
 };
 
 const BinaryCase kBinaryOps[] = {
-#define NN_BINARY(Name, method, fwd, da, db) {BinaryOp::Name, #method},
+#define NN_BINARY(Name, method) {BinaryOp::Name, #method},
 #include <nn/kernels/binary_ops.def>
 #undef NN_BINARY
 };
 
 const ScalarCase kScalarOps[] = {
-#define NN_SCALAR(Name, method, fwd, bwd) {ScalarOp::Name, #method},
+#define NN_SCALAR(Name, method) {ScalarOp::Name, #method},
 #include <nn/kernels/scalar_ops.def>
 #undef NN_SCALAR
 };
@@ -122,17 +122,11 @@ NN_TEST(elementwise_lists_are_not_empty) {
   NN_CHECK(nn::kernels::kScalarOpCount >= 12);
 }
 
-// The Needs column is hand-written, separately from the arithmetic it
-// describes, so nothing stops it drifting out of sync with a derivative edit
-// -- understating it silently reads the wrong value (0.0f in place of the
-// real x or y), overstating it just wastes memory. This probes the actual
-// arithmetic directly: apply_unary_backward is pure, so evaluating it at two
-// values that differ in both sign and magnitude reveals real dependence on
-// that argument, independent of what the column claims.
 NN_TEST(unary_needs_matches_the_real_dependency) {
   using nn::kernels::apply_unary_backward;
   using nn::kernels::needs_x;
   using nn::kernels::needs_y;
+  using nn::kernels::unary_needs;
 
   constexpr float kG = 1.3f;
   // Differ in sign and in magnitude, so both a step function (Abs, Relu) and
@@ -141,19 +135,20 @@ NN_TEST(unary_needs_matches_the_real_dependency) {
   constexpr float kYa = -0.6f, kYb = 0.85f;
 
   for (const UnaryCase& c : kUnaryOps) {
+    const nn::kernels::UnaryNeeds needs = unary_needs(c.op);
     const bool depends_x = apply_unary_backward(c.op, kXa, kYa, kG) !=
                            apply_unary_backward(c.op, kXb, kYa, kG);
     const bool depends_y = apply_unary_backward(c.op, kXa, kYa, kG) !=
                            apply_unary_backward(c.op, kXa, kYb, kG);
 
-    if (depends_x != needs_x(c.needs)) {
+    if (depends_x != needs_x(needs)) {
       nn::test::report(__FILE__, __LINE__, std::string(c.name) +
-          ": Needs says x is " + (needs_x(c.needs) ? "read" : "not read") +
+          ": kNeeds says x is " + (needs_x(needs) ? "read" : "not read") +
           " but the derivative " + (depends_x ? "does" : "does not") + " depend on it");
     }
-    if (depends_y != needs_y(c.needs)) {
+    if (depends_y != needs_y(needs)) {
       nn::test::report(__FILE__, __LINE__, std::string(c.name) +
-          ": Needs says y is " + (needs_y(c.needs) ? "read" : "not read") +
+          ": kNeeds says y is " + (needs_y(needs) ? "read" : "not read") +
           " but the derivative " + (depends_y ? "does" : "does not") + " depend on it");
     }
   }
