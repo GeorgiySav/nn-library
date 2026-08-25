@@ -82,6 +82,8 @@ NN_TEST(different_seeds_give_different_streams) {
 
 // The mask is integer arithmetic, so both backends must produce the same one.
 NN_TEST(the_same_seed_and_offset_give_the_same_mask_on_both_devices) {
+  if (!nn::test::have_cuda()) return;
+
   const int n = 4096;
   const nn::Tensor cpu = nn::ops::dropout(ones(n, nn::Device::CPU), 0.3f, 42, 1000);
   const nn::Tensor gpu = nn::ops::dropout(ones(n, nn::Device::CUDA), 0.3f, 42, 1000);

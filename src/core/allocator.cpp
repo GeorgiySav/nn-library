@@ -2,11 +2,16 @@
 
 #include <cstdlib>
 #include <cstring>
+#include <new>        // std::align_val_t
 #include <stdexcept>
 
+#if defined(NN_WITH_CUDA)
 #include "cuda_common.h"
+#endif
 
 namespace nn {
+
+#if defined(NN_WITH_CUDA)
 
 namespace {
 
@@ -28,6 +33,8 @@ void configure_pool_once() {
 
 }
 
+#endif  // NN_WITH_CUDA
+
 struct CpuAllocator : public Allocator {
   void* alloc(size_t bytes) override {
     if (bytes == 0) {
@@ -43,6 +50,8 @@ struct CpuAllocator : public Allocator {
     }
   }
 };
+
+#if defined(NN_WITH_CUDA)
 
 struct CudaAllocator : public Allocator {
   void* alloc(size_t bytes) override {
@@ -71,6 +80,8 @@ struct CudaAllocator : public Allocator {
   }
 };
 
+#endif  // NN_WITH_CUDA
+
 void copy_bytes(void* dst, Device dst_dev,
                 const void* src, Device src_dev, size_t bytes) {
   if (bytes == 0) return;
@@ -80,6 +91,7 @@ void copy_bytes(void* dst, Device dst_dev,
     return;
   }
 
+#if defined(NN_WITH_CUDA)
   cudaMemcpyKind kind;
   if      (src_dev == Device::CPU  && dst_dev == Device::CUDA)
     kind = cudaMemcpyKind::cudaMemcpyHostToDevice;
@@ -93,6 +105,12 @@ void copy_bytes(void* dst, Device dst_dev,
   );
 
   if (dst_dev == Device::CPU) current_stream(Device::CUDA).synchronize();
+#else
+  // Anything that reaches here has a CUDA endpoint, which cannot exist in a
+  // build with no CUDA backend.
+  throw std::runtime_error("nn: built without CUDA, cannot copy to or from a "
+                           "CUDA device");
+#endif
 }
 
 void memset_bytes(void* dst, Device dst_dev, int value, size_t bytes) {
@@ -103,9 +121,14 @@ void memset_bytes(void* dst, Device dst_dev, int value, size_t bytes) {
     return;
   }
 
+#if defined(NN_WITH_CUDA)
   NN_CUDA_CHECK(
     cudaMemsetAsync(dst, value, bytes, cudaStream_t{nullptr})
   );
+#else
+  throw std::runtime_error("nn: built without CUDA, cannot memset a CUDA "
+                           "allocation");
+#endif
 }
 
 Allocator& allocator_for(Device d) {
@@ -115,8 +138,13 @@ Allocator& allocator_for(Device d) {
       return cpu_allocator;
     }
     case Device::CUDA: {
+#if defined(NN_WITH_CUDA)
       static CudaAllocator gpu_allocator;
       return gpu_allocator;
+#else
+      throw std::runtime_error("nn: built without CUDA, no allocator for "
+                               "Device::CUDA");
+#endif
     }
     default:
       throw std::runtime_error("Unknown device");

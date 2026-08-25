@@ -15,7 +15,10 @@ int main() {
   std::printf("%-10s %-6s %10s %10s %10s %8s\n",
               "device", "n", "Sum(ns)", "SumSq", "SumAbs", "sq/sum");
 
-  for (Device d : {Device::CPU, Device::CUDA}) {
+  std::vector<Device> devices{Device::CPU};
+  if (nn::cuda_device_count() > 0) devices.push_back(Device::CUDA);
+
+  for (Device d : devices) {
     for (int64_t n : sizes) {
       std::vector<float> h(static_cast<size_t>(n), 0.0f);
       for (size_t i = 0; i < h.size(); ++i) h[i] = 1e-3f * float(i % 977) - 0.4f;

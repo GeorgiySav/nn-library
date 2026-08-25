@@ -3,7 +3,9 @@
 #include <array>
 #include <stdexcept>
 
+#if defined(NN_WITH_CUDA)
 #include "cuda_common.h"
+#endif
 
 namespace nn {
 
@@ -12,9 +14,13 @@ namespace nn {
 // reports an error rather than zero devices. Either way the answer the caller
 // wants is "no CUDA devices".
 int cuda_device_count() {
+#if defined(NN_WITH_CUDA)
   int n = 0;
   if (cudaGetDeviceCount(&n) != cudaSuccess) return 0;
   return n;
+#else
+  return 0;
+#endif
 }
 
 namespace {
@@ -28,7 +34,12 @@ thread_local std::array<const Stream*, kNumDevices> t_current{nullptr, nullptr};
 
 void Stream::synchronize() const {
   if (device == Device::CPU) return;
+#if defined(NN_WITH_CUDA)
   NN_CUDA_CHECK(cudaStreamSynchronize(static_cast<cudaStream_t>(handle)));
+#else
+  throw std::runtime_error("nn: built without CUDA, cannot synchronize a "
+                           "CUDA stream");
+#endif
 }
 
 const Stream& default_stream(Device d) {

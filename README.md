@@ -1,5 +1,36 @@
 # NN Library
 
+## Backends
+
+The CUDA backend is optional, gated on `NN_WITH_CUDA`. The default follows
+`nvcc`: present means the CUDA backend is built, absent means a CPU-only build
+against the naive kernels. `-DNN_WITH_CUDA=OFF` forces CPU-only on a CUDA box,
+which is a quick way to check the naive kernels in isolation.
+
+In a CPU-only build every `Device::CUDA` entry point throws, and
+`cuda_device_count()` returns 0 — so anything that gates on it (`devices()` in
+the tests, the benches, the MNIST example) picks CPU on its own.
+
+## macOS
+
+CPU-only is the only option: NVIDIA's last macOS toolkit was CUDA 10.2, and
+Apple Silicon has no NVIDIA GPU. Ninja is optional; this uses the default
+generator.
+
+```bash
+cmake -S . -B build-mac -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Debug
+cmake --build build-mac -j8 && ctest --test-dir build-mac --output-on-failure
+```
+
+Debug on non-Windows adds `-fsanitize=address,undefined`; the suite is clean
+under both. For the example, build Release — Debug plus sanitizers makes the
+naive GEMM far too slow to train on.
+
+```bash
+cmake -S . -B build-rel -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Release
+cmake --build build-rel --target example_mnist -j8 && ./build-rel/example_mnist
+```
+
 ## To build for tests
 
 ```bash

@@ -33,7 +33,9 @@ float accuracy(nn::Module& model, nn::data::DataLoader<>& loader) {
 
 int main(int argc, char** argv) {
   std::printf("MNIST EXAMPLE\n");
-  nn::Device device = nn::Device::CUDA;
+  nn::Device device =
+      nn::cuda_device_count() > 0 ? nn::Device::CUDA : nn::Device::CPU;
+  std::printf("Device: %s\n", nn::device_name(device));
 
   const std::string dir = (argc > 1) ? argv[1] : NN_PROJECT_ROOT "/data/mnist";
 

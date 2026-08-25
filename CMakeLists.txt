@@ -52,62 +52,85 @@ target_compile_options(nn_flags INTERFACE
   $<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<CONFIG:Release>>:-lineinfo>
   $<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<CONFIG:Debug>>:-G>)
 
-# CUDA is a hard requirement: the backend is compiled unconditionally, so the
-# toolkit must be present to build at all. enable_language rather than naming
-# CUDA in project() because the manifest-tool search below has to run first.
-#
-# nvcc uses MSVC as its host compiler, so CMake links CUDA targets through its
-# vs_link_exe wrapper, which needs a manifest tool. CMAKE_MT is only
-# auto-detected when the Windows SDK is on PATH -- i.e. from a Developer Command
-# Prompt. Outside one it comes up empty and the link fails with
-# "MT: command mt ... failed ... no such file or directory".
-# Search into our own variable, not CMAKE_MT: CMake's Windows platform module
-# may already have created CMAKE_MT as an empty cache entry, and find_program
-# silently does nothing when its output variable is already in the cache.
-if(WIN32 AND NOT CMAKE_MT)
-  get_filename_component(_nn_cxx_bin "${CMAKE_CXX_COMPILER}" DIRECTORY)
-  file(GLOB _nn_sdk_bin "C:/Program Files (x86)/Windows Kits/10/bin/*/x64")
-  find_program(NN_MANIFEST_TOOL NAMES llvm-mt mt
-    HINTS "${_nn_cxx_bin}" ${_nn_sdk_bin})
-  if(NOT NN_MANIFEST_TOOL)
-    message(FATAL_ERROR
-      "No manifest tool found. Pass -DCMAKE_MT=<path to llvm-mt.exe or mt.exe>, "
-      "or configure from a Visual Studio Developer Command Prompt.")
+# The CUDA backend is optional
+find_program(NN_NVCC_EXECUTABLE nvcc
+  DOC "nvcc, used only to choose the NN_WITH_CUDA default")
+if(NN_NVCC_EXECUTABLE)
+  set(NN_CUDA_DEFAULT ON)
+else()
+  set(NN_CUDA_DEFAULT OFF)
+endif()
+option(NN_WITH_CUDA "Build the CUDA backend" ${NN_CUDA_DEFAULT})
+message(STATUS "CUDA backend: ${NN_WITH_CUDA}")
+
+if(NN_WITH_CUDA)
+  # enable_language rather than naming CUDA in project() because the
+  # manifest-tool search below has to run first.
+  #
+  # nvcc uses MSVC as its host compiler, so CMake links CUDA targets through its
+  # vs_link_exe wrapper, which needs a manifest tool. CMAKE_MT is only
+  # auto-detected when the Windows SDK is on PATH -- i.e. from a Developer Command
+  # Prompt. Outside one it comes up empty and the link fails with
+  # "MT: command mt ... failed ... no such file or directory".
+  # Search into our own variable, not CMAKE_MT: CMake's Windows platform module
+  # may already have created CMAKE_MT as an empty cache entry, and find_program
+  # silently does nothing when its output variable is already in the cache.
+  if(WIN32 AND NOT CMAKE_MT)
+    get_filename_component(_nn_cxx_bin "${CMAKE_CXX_COMPILER}" DIRECTORY)
+    file(GLOB _nn_sdk_bin "C:/Program Files (x86)/Windows Kits/10/bin/*/x64")
+    find_program(NN_MANIFEST_TOOL NAMES llvm-mt mt
+      HINTS "${_nn_cxx_bin}" ${_nn_sdk_bin})
+    if(NOT NN_MANIFEST_TOOL)
+      message(FATAL_ERROR
+        "No manifest tool found. Pass -DCMAKE_MT=<path to llvm-mt.exe or mt.exe>, "
+        "or configure from a Visual Studio Developer Command Prompt.")
+    endif()
+    set(CMAKE_MT "${NN_MANIFEST_TOOL}" CACHE FILEPATH "Manifest tool" FORCE)
+    message(STATUS "Manifest tool: ${CMAKE_MT}")
   endif()
-  set(CMAKE_MT "${NN_MANIFEST_TOOL}" CACHE FILEPATH "Manifest tool" FORCE)
-  message(STATUS "Manifest tool: ${CMAKE_MT}")
+
+  # Must be set BEFORE enable_language(CUDA): that call seeds
+  # CMAKE_CUDA_ARCHITECTURES in the cache from nvcc's built-in default (75 for
+  # CUDA 13.x), so a "NOT DEFINED" guard placed after it never fires and every
+  # build silently targets the default arch. Compiling for the wrong arch is not
+  # a build error -- the PTX just gets JIT'd at launch, and on a newer GPU the
+  # driver rejects it with "the provided PTX was compiled with an unsupported
+  # toolchain", surfacing as a runtime throw from the first kernel launch.
+  if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+    set(CMAKE_CUDA_ARCHITECTURES native)
+  endif()
+  enable_language(CUDA)
+  set(CMAKE_CUDA_STANDARD 20)
+  set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+
+  # Our executables link with clang++, whose GNU-style driver treats a bare
+  # "cudart.lib" as a filename and fails. CMake adds the CUDA runtime in exactly
+  # that form to anything linking a target with .cu sources, so we suppress that
+  # and link CUDA::cudart instead, which carries an absolute path clang++ accepts.
+  find_package(CUDAToolkit REQUIRED)
+  set(CMAKE_CUDA_RUNTIME_LIBRARY None)
+
+  # Carried to every consumer of nn, not just src/: bench.h and the tests branch
+  # on this too. Absence of the macro is what a CPU-only build looks like.
+  target_compile_definitions(nn_flags INTERFACE NN_WITH_CUDA)
 endif()
 
-# Must be set BEFORE enable_language(CUDA): that call seeds
-# CMAKE_CUDA_ARCHITECTURES in the cache from nvcc's built-in default (75 for
-# CUDA 13.x), so a "NOT DEFINED" guard placed after it never fires and every
-# build silently targets the default arch. Compiling for the wrong arch is not
-# a build error -- the PTX just gets JIT'd at launch, and on a newer GPU the
-# driver rejects it with "the provided PTX was compiled with an unsupported
-# toolchain", surfacing as a runtime throw from the first kernel launch.
-if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
-  set(CMAKE_CUDA_ARCHITECTURES native)
+file(GLOB_RECURSE NN_SOURCES CONFIGURE_DEPENDS src/*.cpp)
+if(NN_WITH_CUDA)
+  file(GLOB_RECURSE NN_CUDA_SOURCES CONFIGURE_DEPENDS src/*.cu)
+  list(APPEND NN_SOURCES ${NN_CUDA_SOURCES})
 endif()
-enable_language(CUDA)
-set(CMAKE_CUDA_STANDARD 20)
-set(CMAKE_CUDA_STANDARD_REQUIRED ON)
-
-# Our executables link with clang++, whose GNU-style driver treats a bare
-# "cudart.lib" as a filename and fails. CMake adds the CUDA runtime in exactly
-# that form to anything linking a target with .cu sources, so we suppress that
-# and link CUDA::cudart instead, which carries an absolute path clang++ accepts.
-find_package(CUDAToolkit REQUIRED)
-set(CMAKE_CUDA_RUNTIME_LIBRARY None)
-
-file(GLOB_RECURSE NN_SOURCES CONFIGURE_DEPENDS src/*.cpp src/*.cu)
 add_library(nn STATIC ${NN_SOURCES})
 target_include_directories(nn PUBLIC include)
 # Backend-private headers (cuda_common.h, and naive_kernels.h by its own path).
 # PRIVATE: consumers must never see these, and cuda_common.h in particular
 # would drag <cuda_runtime.h> onto the public surface.
 target_include_directories(nn PRIVATE src)
-target_link_libraries(nn PUBLIC nn_flags CUDA::cudart CUDA::cublas)
-set_target_properties(nn PROPERTIES CUDA_SEPARABLE_COMPILATION OFF)
+target_link_libraries(nn PUBLIC nn_flags)
+if(NN_WITH_CUDA)
+  target_link_libraries(nn PUBLIC CUDA::cudart CUDA::cublas)
+  set_target_properties(nn PROPERTIES CUDA_SEPARABLE_COMPILATION OFF)
+endif()
 
 enable_testing()
 file(GLOB TEST_SOURCES CONFIGURE_DEPENDS tests/*.cpp)

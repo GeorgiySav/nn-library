@@ -5,7 +5,9 @@
 #include <stdexcept>
 
 #include "naive/naive_kernels.h"
+#if defined(NN_WITH_CUDA)
 #include "cuda/cuda_kernels.h"
+#endif
 
 namespace nn::kernels {
 namespace {
@@ -54,6 +56,8 @@ void register_naive_kernels() {
   g_backend[index_of(Device::CPU)] = "naive";
 }
 
+#if defined(NN_WITH_CUDA)
+
 void register_cuda_kernels() {
   KernelTable& t = table(Device::CUDA);
 #define NN_KERNEL(name, Type) t.name = &cuda_##name;
@@ -62,6 +66,8 @@ void register_cuda_kernels() {
 
   g_backend[index_of(Device::CUDA)] = "CUDA";
 }
+
+#endif  // NN_WITH_CUDA
 
 void validate_table(Device d) {
   const KernelTable& t = g_tables[index_of(d)];
@@ -74,6 +80,8 @@ void validate_table(Device d) {
 #undef NN_KERNEL
 }
 
+#if defined(NN_WITH_CUDA)
+
 void register_cublas_kernels() {
   KernelTable& t = table(Device::CUDA);
 
@@ -82,19 +90,23 @@ void register_cublas_kernels() {
   g_backend[index_of(Device::CUDA)] = "cuBLAS";
 }
 
+#endif  // NN_WITH_CUDA
+
 void init_kernels() {
   static const bool once = [] {
     register_naive_kernels();
+
+    validate_table(Device::CPU);
+
+#if defined(NN_WITH_CUDA)
     register_cuda_kernels();
 
     const char* sel = std::getenv("NN_KERNELS");
     if (!(sel && std::strcmp(sel, "handwritten") == 0))
       register_cublas_kernels();
 
-    // Cheap, runs once, and turns a forgotten registration from a null call at
-    // first use into a named error at startup.
-    validate_table(Device::CPU);
     validate_table(Device::CUDA);
+#endif
 
     return true;
   }();

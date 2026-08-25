@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstddef>
+
 #include "device.h"
 
 namespace nn {

@@ -23,9 +23,17 @@ void check_same(const nn::Tensor& got, const nn::Tensor& want, float tol,
   }
   const nn::Tensor g = got.pack().to(nn::Device::CPU);
   const nn::Tensor w = want.pack().to(nn::Device::CPU);
+  if (g.dtype() != w.dtype()) {
+    nn::test::report(file, line, std::string(what) + ": dtype mismatch");
+    return;
+  }
+  const auto at = [](const nn::Tensor& t, int64_t i) {
+    return t.dtype() == nn::DType::I32 ? float(t.host_data_i32()[i])
+                                       : t.host_data()[i];
+  };
   const int64_t n = g.numel();
   for (int64_t i = 0; i < n; ++i) {
-    const float a = g.host_data()[i], b = w.host_data()[i];
+    const float a = at(g, i), b = at(w, i);
     const float d = std::fabs(a - b);
     const float scale = std::fmax(1e-8f, std::fmax(std::fabs(a), std::fabs(b)));
     if (d > tol && d / scale > tol) {

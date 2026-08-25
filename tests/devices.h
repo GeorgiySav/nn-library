@@ -18,6 +18,8 @@ inline const std::vector<Device>& devices() {
   return d;
 }
 
+inline bool have_cuda() { return cuda_device_count() > 0; }
+
 // Suffixes the reported test name with the device, so an assertion failing
 // inside a per-device loop says which device produced it.
 class DeviceLabel {

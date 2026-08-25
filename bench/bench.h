@@ -5,7 +5,9 @@
 #include <cstdio>
 #include <vector>
 
+#if defined(NN_WITH_CUDA)
 #include <cuda_runtime.h>
+#endif
 
 #include <nn/core/device.h>
 
@@ -52,8 +54,13 @@ double time_ns_on(Device d, F&& fn, int reps = 1, double budget = 0.5) {
   return samples[samples.size() / 2];
 }
 
+// 0.0 means "unknown", which report_bandwidth already renders as a plain GB/s
+// figure with no percent-of-peak column
 inline double peak_bandwidth_gb_s(Device d) {
   if (d != Device::CUDA) return 0.0;
+#if !defined(NN_WITH_CUDA)
+  return 0.0;
+#else
   int dev = 0, clock_khz = 0, bus_bits = 0;
   if (cudaGetDevice(&dev) != cudaSuccess) return 0.0;
   if (cudaDeviceGetAttribute(&clock_khz, cudaDevAttrMemoryClockRate, dev)
@@ -61,6 +68,7 @@ inline double peak_bandwidth_gb_s(Device d) {
   if (cudaDeviceGetAttribute(&bus_bits, cudaDevAttrGlobalMemoryBusWidth, dev)
       != cudaSuccess) return 0.0;
   return 2.0 * double(clock_khz) * 1e3 * (bus_bits / 8.0) / 1e9;
+#endif
 }
 
 inline void report_bandwidth(const char* name, double ns, double bytes,

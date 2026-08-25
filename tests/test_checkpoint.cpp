@@ -101,6 +101,8 @@ NN_TEST(a_round_trip_is_exact) {
 }
 
 NN_TEST(a_checkpoint_crosses_devices) {
+  if (!nn::test::have_cuda()) return;
+
   TempFile file("nn_ck_devices.bin");
 
   nn::Sequential on_cpu = make_model(nn::Device::CPU, 11);
