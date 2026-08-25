@@ -48,21 +48,7 @@ public:
     return n;
   }
 
-  bool operator==(const Shape& other) const {
-    if (rank_ != other.rank_) {
-      return false;
-    }
-    for (int i = 0; i < rank_; ++i) {
-      if (dims_[i] != other.dims_[i]) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  bool operator!=(const Shape& other) const {
-    return !(*this == other);
-  }
+  bool operator==(const Shape& other) const = default; 
 
   std::string str() const {
     std::string s = "[";
@@ -77,9 +63,8 @@ public:
   }
 
 private:
-
-  int dims_[kMaxShapeRank] = {0};
   int rank_ = 0;
+  int dims_[kMaxShapeRank] = {0};
 };
 
 // numpy broadcasting: align from the right, each axis must match or be 1.
