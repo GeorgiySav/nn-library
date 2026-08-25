@@ -1,6 +1,6 @@
 #pragma once
 
-#include <nn/core/strides.h>
+#include <nn/core/tensorview.h>
 
 #if defined(__CUDACC__)
 #  define NN_STRIDED_INLINE __host__ __device__ inline

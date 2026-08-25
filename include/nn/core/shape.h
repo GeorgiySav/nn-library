@@ -6,9 +6,9 @@
 #include <stdexcept>
 #include <string>
 
+#include <nn/core/tensorview.h>
 namespace nn {
 
-inline constexpr int kMaxShapeRank = 8;
 class Shape {
 public:
   Shape() = default;

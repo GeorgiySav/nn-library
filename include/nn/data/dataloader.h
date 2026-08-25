@@ -2,6 +2,7 @@
 
 #include <numeric>
 #include <stdexcept>
+#include <vector>
 
 #include <nn/core/tensor.h>
 #include <nn/data/dataset.h>

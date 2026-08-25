@@ -3,6 +3,7 @@
 #include <cassert>
 
 #include <nn/core/shape.h>
+#include <nn/core/tensorview.h>
 
 namespace nn {
 
@@ -34,13 +35,6 @@ public:
 private:
   int64_t v_[kMaxShapeRank] = {0};
   int rank_ = 0;
-};
-
-// layout of one tensor for the kernel
-struct TensorView {
-  int64_t shape[kMaxShapeRank] = {0};
-  int64_t stride[kMaxShapeRank] = {0};
-  int rank = 0;
 };
 
 }

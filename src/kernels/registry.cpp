@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <stdexcept>
+#include <string>
 
 #include "naive/naive_kernels.h"
 #if defined(NN_WITH_CUDA)

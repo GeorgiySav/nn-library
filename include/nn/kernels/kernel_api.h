@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-#include <nn/core/strides.h>
+#include <nn/core/tensorview.h>
 #include <nn/core/device.h>
 #include <nn/kernels/elementwise_ops.h>
 #include <nn/kernels/random.h>
