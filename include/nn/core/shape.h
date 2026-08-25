@@ -31,12 +31,12 @@ public:
   int rank() const { return rank_; }
   
   int dim(int i) const {
-    assert(i < rank_);
+    assert(i >= 0 && i < rank_);
     return dims_[i];
   }
 
   void set_dim(int i, int d) {
-    assert(i < rank_);
+    assert(i >= 0 && i < rank_);
     dims_[i] = d;
   }
 

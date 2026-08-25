@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <span>
 #include <stdexcept>
+#include <cassert>
+#include <cstring>
 
 #include <nn/core/tensor.h>
 
@@ -61,7 +63,7 @@ public:
     if (y_.shape().rank() != 1 && y_.shape().rank() != 2) {
       throw std::invalid_argument("TensorDataset: y must be [N] or [N, K]");
     }
-    if (x_.shape().dim(0) != y.shape().dim(0)) {
+    if (x_.shape().dim(0) != y_.shape().dim(0)) {
       throw std::invalid_argument("TensorDataset: sample count mismatch");
     }
     if (y_.dtype() != dtype_of_v<Target>) {

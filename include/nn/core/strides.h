@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cassert>
+
 #include <nn/core/shape.h>
 
 namespace nn {
@@ -21,11 +23,11 @@ public:
 
   int rank() const { return rank_; }
   int64_t at(int i) const { 
-    assert(i < rank_);
+    assert(i >= 0 && i < rank_);
     return v_[i]; 
   }
   int64_t& at(int i) { 
-    assert(i < rank_);
+    assert(i >= 0 && i < rank_);
     return v_[i]; 
   }
 

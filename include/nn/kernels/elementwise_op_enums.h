@@ -15,7 +15,6 @@ enum class UnaryOp : int {
 enum class UnaryNeeds : uint8_t { None = 0, X = 1, Y = 2, Both = 3 };
 inline bool needs_x(UnaryNeeds n)    { return (uint8_t(n) & uint8_t(UnaryNeeds::X)) != 0; }
 inline bool needs_y(UnaryNeeds n)    { return (uint8_t(n) & uint8_t(UnaryNeeds::Y)) != 0; }
-inline bool needs_both(UnaryNeeds n) { return (uint8_t(n) & uint8_t(UnaryNeeds::Both)) != 0; }
 
 enum class BinaryOp : int {
 #define NN_BINARY(Name, method) Name,

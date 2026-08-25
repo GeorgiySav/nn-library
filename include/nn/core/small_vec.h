@@ -15,9 +15,12 @@ public:
       data_[size_++] = v;
     }
   }
-  SmallVec(size_t n) {
+  explicit SmallVec(size_t n) {
     assert(n <= N);
-    size_ = n;
+    size_ = int(n);
+    for (int i = 0; i < size_; ++i) {
+      data_[i] = T{};
+    }
   }
 
   std::span<T> span() { return {data_, size_t(size_)}; }
