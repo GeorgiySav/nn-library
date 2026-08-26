@@ -66,10 +66,10 @@ inline Tensor load_mnist_labels(const std::string& path) {
   return y;
 }
 
-inline std::shared_ptr<TensorDataset<>> load_mnist(const std::string& images,
-                                                   const std::string& labels) {
-  return std::make_shared<TensorDataset<>>(load_mnist_images(images),
-                                           load_mnist_labels(labels));
+inline std::shared_ptr<TensorDataset> load_mnist(const std::string& images,
+                                                 const std::string& labels) {
+  return std::make_shared<TensorDataset>(load_mnist_images(images),
+                                         load_mnist_labels(labels));
 }
 
 }
