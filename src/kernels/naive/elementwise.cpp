@@ -3,7 +3,7 @@
 #include <cmath>
 
 #include <nn/core/device.h>
-#include <nn/kernels/random.h>
+#include <kernels/random.h>
 
 #include "../strided_index.h"
 

@@ -5,17 +5,8 @@
 #define NN_PROJECT_ROOT "."
 #endif
 
-#include <nn/core/rng.h>
-
-#include <nn/nn/module.h>
-#include <nn/optim/optim.h>
-#include <nn/autograd/tape.h>
-#include <nn/metrics.h>
-
-#include <nn/io/checkpoint.h>
-
+#include <nn/nn.h>
 #include <nn/data/mnist.h>
-#include <nn/data/dataloader.h>
 
 float accuracy(nn::Module& model, nn::data::DataLoader<>& loader) {
   nn::autograd::NoGradScope no_grad;

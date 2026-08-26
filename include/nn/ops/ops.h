@@ -1,14 +1,9 @@
 #pragma once
 
 #include <nn/core/tensor.h>
-#include <nn/kernels/elementwise_ops.h>
+#include <nn/ops/op_enums.h>
 
 namespace nn::ops {
-
-using kernels::UnaryOp;
-using kernels::BinaryOp;
-using kernels::ScalarOp;
-using kernels::Accum;
 
 Tensor matmul(const Tensor& a, const Tensor& b, bool transA = false, bool transB = false);
 void   matmul_into(Tensor& out, const Tensor& a, const Tensor& b,

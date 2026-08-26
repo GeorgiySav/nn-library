@@ -136,7 +136,11 @@ enable_testing()
 file(GLOB TEST_SOURCES CONFIGURE_DEPENDS tests/*.cpp)
 add_executable(test_all ${TEST_SOURCES})
 target_link_libraries(test_all PRIVATE nn)
-target_include_directories(test_all PRIVATE tests)
+# src too: the tests exercise the kernel layer directly (the dispatch table,
+# the op traits, the RNG), and that layer is deliberately not on the public
+# include path. Anything reaching src/ from here is testing an implementation
+# detail on purpose.
+target_include_directories(test_all PRIVATE tests ${CMAKE_SOURCE_DIR}/src)
 add_test(NAME unit COMMAND test_all)
 
 if(NN_BUILD_EXAMPLES)
@@ -159,6 +163,8 @@ if(NN_BUILD_BENCH)
     get_filename_component(name "${src}" NAME_WE)
     add_executable(${name} "${src}")
     target_link_libraries(${name} PRIVATE nn)
-    target_include_directories(${name} PRIVATE bench)
+    # src for the same reason the tests get it: bench_bandwidth measures the
+    # kernel table directly.
+    target_include_directories(${name} PRIVATE bench ${CMAKE_SOURCE_DIR}/src)
   endforeach()
 endif()

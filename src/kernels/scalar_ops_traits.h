@@ -1,7 +1,7 @@
 #pragma once
 
-#include <nn/kernels/ew_inline.h>
-#include <nn/kernels/elementwise_op_enums.h>
+#include <kernels/ew_inline.h>
+#include <nn/ops/op_enums.h>
 
 // Per-op forward/backward arithmetic for every "tensor combined with a host
 // float" op. `y` is the forward result, `g` the incoming gradient, `k` the

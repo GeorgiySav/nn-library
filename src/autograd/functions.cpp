@@ -7,6 +7,10 @@
 
 #include <nn/core/small_vec.h>
 
+// unary_needs and the op-name lookups are part of the private kernel layer;
+// this file is library implementation, so it may reach into src/.
+#include <kernels/elementwise_ops.h>
+
 namespace nn::autograd {
 
 namespace {
@@ -77,19 +81,25 @@ Tensor scalar(ops::ScalarOp op, const Tensor& x, float k) {
 }
 
 // The named wrappers, generated from the same lists as the kernels.
+//
+// autograd:: is spelled out so these read the same as the Tensor-method
+// wrappers further down, which have to qualify.
+
 #define NN_UNARY(Name, method) \
-  Tensor method(const Tensor& x) { return unary(ops::UnaryOp::Name, x); }
-#include <nn/kernels/unary_ops.def>
+  Tensor method(const Tensor& x) { return autograd::unary(ops::UnaryOp::Name, x); }
+#include <nn/ops/unary_ops.def>
 #undef NN_UNARY
 
-#define NN_BINARY(Name, method) \
-  Tensor method(const Tensor& a, const Tensor& b) { return binary(ops::BinaryOp::Name, a, b); }
-#include <nn/kernels/binary_ops.def>
+#define NN_BINARY(Name, method)                        \
+  Tensor method(const Tensor& a, const Tensor& b) {    \
+    return autograd::binary(ops::BinaryOp::Name, a, b); }
+#include <nn/ops/binary_ops.def>
 #undef NN_BINARY
 
-#define NN_SCALAR(Name, method) \
-  Tensor method(const Tensor& x, float k) { return scalar(ops::ScalarOp::Name, x, k); }
-#include <nn/kernels/scalar_ops.def>
+#define NN_SCALAR(Name, method)                        \
+  Tensor method(const Tensor& x, float k) {            \
+    return autograd::scalar(ops::ScalarOp::Name, x, k); }
+#include <nn/ops/scalar_ops.def>
 #undef NN_SCALAR
 
 namespace {
@@ -439,18 +449,18 @@ namespace nn {
 
 #define NN_UNARY(Name, method) \
   Tensor Tensor::method() const { return autograd::unary(kernels::UnaryOp::Name, *this); }
-#include <nn/kernels/unary_ops.def>
+#include <nn/ops/unary_ops.def>
 #undef NN_UNARY
 
 #define NN_BINARY(Name, method)                                  \
   Tensor Tensor::method(const Tensor& other) const {             \
     return autograd::binary(kernels::BinaryOp::Name, *this, other); }
-#include <nn/kernels/binary_ops.def>
+#include <nn/ops/binary_ops.def>
 #undef NN_BINARY
 
 #define NN_SCALAR(Name, method) \
   Tensor Tensor::method(float k) const { return autograd::scalar(kernels::ScalarOp::Name, *this, k); }
-#include <nn/kernels/scalar_ops.def>
+#include <nn/ops/scalar_ops.def>
 #undef NN_SCALAR
 
 Tensor Tensor::contiguous() const { return autograd::contiguous(*this); }

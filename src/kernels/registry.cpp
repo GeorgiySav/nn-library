@@ -1,4 +1,4 @@
-#include <nn/kernels/kernel_api.h>
+#include <kernels/kernel_api.h>
 
 #include <cstdlib>
 #include <cstring>
@@ -51,7 +51,7 @@ const char* active_backend_name(Device d) {
 void register_naive_kernels() {
   KernelTable& t = table(Device::CPU);
 #define NN_KERNEL(name, Type) t.name = &naive_##name;
-#include <nn/kernels/kernel_list.def>
+#include <kernels/kernel_list.def>
 #undef NN_KERNEL
 
   g_backend[index_of(Device::CPU)] = "naive";
@@ -62,7 +62,7 @@ void register_naive_kernels() {
 void register_cuda_kernels() {
   KernelTable& t = table(Device::CUDA);
 #define NN_KERNEL(name, Type) t.name = &cuda_##name;
-#include <nn/kernels/kernel_list.def>
+#include <kernels/kernel_list.def>
 #undef NN_KERNEL
 
   g_backend[index_of(Device::CUDA)] = "CUDA";
@@ -77,7 +77,7 @@ void validate_table(Device d) {
     throw std::runtime_error(std::string("kernel \"" #name "\" is not "     \
                              "registered for ") + device_name(d));         \
   }
-#include <nn/kernels/kernel_list.def>
+#include <kernels/kernel_list.def>
 #undef NN_KERNEL
 }
 

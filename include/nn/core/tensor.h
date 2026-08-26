@@ -103,15 +103,15 @@ public:
   // adding a line to unary_ops.def adds the kernel, the autograd node, the
   // free function and this method at once.
 #define NN_UNARY(Name, method) Tensor method() const;
-#include <nn/kernels/unary_ops.def>
+#include <nn/ops/unary_ops.def>
 #undef NN_UNARY
 
 #define NN_BINARY(Name, method) Tensor method(const Tensor& other) const;
-#include <nn/kernels/binary_ops.def>
+#include <nn/ops/binary_ops.def>
 #undef NN_BINARY
 
 #define NN_SCALAR(Name, method) Tensor method(float k) const;
-#include <nn/kernels/scalar_ops.def>
+#include <nn/ops/scalar_ops.def>
 #undef NN_SCALAR
 
   Tensor contiguous() const;                 // pack(), plus identity backward

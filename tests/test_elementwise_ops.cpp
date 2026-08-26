@@ -10,6 +10,10 @@
 #include <nn/core/tensor.h>
 #include <nn/ops/ops.h>
 
+// Private kernel layer: this test checks the op arithmetic itself against the
+// Needs metadata, which is not public API.
+#include <kernels/elementwise_ops.h>
+
 namespace {
 
 using nn::kernels::BinaryOp;
@@ -22,19 +26,19 @@ struct ScalarCase { ScalarOp op; const char* name; };
 
 const UnaryCase kUnaryOps[] = {
 #define NN_UNARY(Name, method) {UnaryOp::Name, #method},
-#include <nn/kernels/unary_ops.def>
+#include <nn/ops/unary_ops.def>
 #undef NN_UNARY
 };
 
 const BinaryCase kBinaryOps[] = {
 #define NN_BINARY(Name, method) {BinaryOp::Name, #method},
-#include <nn/kernels/binary_ops.def>
+#include <nn/ops/binary_ops.def>
 #undef NN_BINARY
 };
 
 const ScalarCase kScalarOps[] = {
 #define NN_SCALAR(Name, method) {ScalarOp::Name, #method},
-#include <nn/kernels/scalar_ops.def>
+#include <nn/ops/scalar_ops.def>
 #undef NN_SCALAR
 };
 

@@ -2,7 +2,7 @@
 #include "devices.h"
 
 #include <nn/core/tensor.h>
-#include <nn/kernels/kernel_api.h>
+#include <kernels/kernel_api.h>
 
 const nn::kernels::KernelTable& init(nn::Device d) {
   nn::kernels::init_kernels();

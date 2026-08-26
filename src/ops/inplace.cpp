@@ -5,7 +5,7 @@
 #include <stdexcept>
 #include <string>
 #include <cmath>
-#include <nn/kernels/kernel_api.h>
+#include <kernels/kernel_api.h>
 
 #include "ops_common.h"
 

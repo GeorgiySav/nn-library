@@ -1,7 +1,7 @@
 #pragma once
 
-#include <nn/kernels/ew_inline.h>
-#include <nn/kernels/elementwise_op_enums.h>
+#include <kernels/ew_inline.h>
+#include <nn/ops/op_enums.h>
 
 // Per-op forward/backward arithmetic for every unary op. Each fwd/bwd is
 // NN_EW_INLINE, so it compiles once and is reused as plain host code (naive

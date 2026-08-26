@@ -5,7 +5,7 @@
 #include <vector>
 
 #include <nn/core/tensor.h>
-#include <nn/kernels/kernel_api.h>
+#include <kernels/kernel_api.h>
 
 using nn::Device;
 using nn::Stream;

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <nn/kernels/kernel_api.h>
+#include <kernels/kernel_api.h>
 
 namespace nn::kernels {
 
@@ -9,7 +9,7 @@ namespace nn::kernels {
 // function types rather than pointers to them -- so a body whose signature
 // drifts fails to link rather than silently registering the wrong thing.
 #define NN_KERNEL(name, Type) Type naive_##name;
-#include <nn/kernels/kernel_list.def>
+#include <kernels/kernel_list.def>
 #undef NN_KERNEL
 
 }

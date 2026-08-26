@@ -3,7 +3,7 @@
 #include "../../cuda_common.h"
 #include "../strided_index.h"
 
-#include <nn/kernels/random.h>
+#include <kernels/random.h>
 
 namespace nn::kernels {
 

@@ -1,6 +1,6 @@
 #include "cuda_kernels.h"
 
-#include <nn/kernels/kernel_api.h>   // kSumAllWorkspace
+#include <kernels/kernel_api.h>   // kSumAllWorkspace
 
 #include "../../cuda_common.h"
 #include "../strided_index.h"

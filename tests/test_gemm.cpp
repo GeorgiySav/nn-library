@@ -4,7 +4,7 @@
 
 #include <nn/core/rng.h>
 #include <nn/core/tensor.h>
-#include <nn/kernels/kernel_api.h>
+#include <kernels/kernel_api.h>
 
 nn::kernels::GemmFn* gemm(nn::Device d) {
   nn::kernels::init_kernels();

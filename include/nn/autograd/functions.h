@@ -10,15 +10,15 @@ Tensor binary(ops::BinaryOp op, const Tensor& a, const Tensor& b);
 Tensor scalar(ops::ScalarOp op, const Tensor& x, float k);
 
 #define NN_UNARY(Name, method) Tensor method(const Tensor& x);
-#include <nn/kernels/unary_ops.def>
+#include <nn/ops/unary_ops.def>
 #undef NN_UNARY
 
 #define NN_BINARY(Name, method) Tensor method(const Tensor& a, const Tensor& b);
-#include <nn/kernels/binary_ops.def>
+#include <nn/ops/binary_ops.def>
 #undef NN_BINARY
 
 #define NN_SCALAR(Name, method) Tensor method(const Tensor& x, float k);
-#include <nn/kernels/scalar_ops.def>
+#include <nn/ops/scalar_ops.def>
 #undef NN_SCALAR
 
 Tensor matmul(const Tensor& x, const Tensor& w); // [M, K] @ [K, N] -> [M, N]

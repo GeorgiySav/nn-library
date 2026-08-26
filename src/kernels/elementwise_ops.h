@@ -4,15 +4,17 @@
 // unary_ops_traits.h / binary_ops_traits.h / scalar_ops_traits.h, each
 // compiled into both backends via NN_EW_INLINE.
 
-#include <nn/kernels/ew_inline.h>
-#include <nn/kernels/elementwise_op_enums.h>
-#include <nn/kernels/unary_ops_traits.h>
-#include <nn/kernels/binary_ops_traits.h>
-#include <nn/kernels/scalar_ops_traits.h>
+#include <kernels/ew_inline.h>
+#include <nn/ops/op_enums.h>
+#include <kernels/unary_ops_traits.h>
+#include <kernels/binary_ops_traits.h>
+#include <kernels/scalar_ops_traits.h>
 
 namespace nn::kernels {
 
-enum class Accum : int { Sum, SumSq, SumAbs };
+// Accum, UnaryOp, BinaryOp and ScalarOp are declared in <nn/ops/op_enums.h>
+// and aliased into this namespace there -- the codes are public vocabulary,
+// only the arithmetic below is private.
 
 NN_EW_INLINE float apply_accum(Accum a, float x) {
   switch (a) {
@@ -63,7 +65,7 @@ NN_EW_INLINE float apply_scalar_backward(ScalarOp op, float x, float y, float g,
 inline const char* unary_op_name(UnaryOp op) {
   switch (op) {
 #define NN_UNARY(Name, method) case UnaryOp::Name: return #method;
-#include <nn/kernels/unary_ops.def>
+#include <nn/ops/unary_ops.def>
 #undef NN_UNARY
   }
   return "?";
@@ -71,7 +73,7 @@ inline const char* unary_op_name(UnaryOp op) {
 inline const char* binary_op_name(BinaryOp op) {
   switch (op) {
 #define NN_BINARY(Name, method) case BinaryOp::Name: return #method;
-#include <nn/kernels/binary_ops.def>
+#include <nn/ops/binary_ops.def>
 #undef NN_BINARY
   }
   return "?";
@@ -79,7 +81,7 @@ inline const char* binary_op_name(BinaryOp op) {
 inline const char* scalar_op_name(ScalarOp op) {
   switch (op) {
 #define NN_SCALAR(Name, method) case ScalarOp::Name: return #method;
-#include <nn/kernels/scalar_ops.def>
+#include <nn/ops/scalar_ops.def>
 #undef NN_SCALAR
   }
   return "?";
@@ -87,17 +89,17 @@ inline const char* scalar_op_name(ScalarOp op) {
 
 inline constexpr int kUnaryOpCount = 0
 #define NN_UNARY(Name, method) + 1
-#include <nn/kernels/unary_ops.def>
+#include <nn/ops/unary_ops.def>
 #undef NN_UNARY
     ;
 inline constexpr int kBinaryOpCount = 0
 #define NN_BINARY(Name, method) + 1
-#include <nn/kernels/binary_ops.def>
+#include <nn/ops/binary_ops.def>
 #undef NN_BINARY
     ;
 inline constexpr int kScalarOpCount = 0
 #define NN_SCALAR(Name, method) + 1
-#include <nn/kernels/scalar_ops.def>
+#include <nn/ops/scalar_ops.def>
 #undef NN_SCALAR
     ;
 

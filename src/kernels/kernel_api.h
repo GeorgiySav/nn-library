@@ -4,8 +4,8 @@
 
 #include <nn/core/tensorview.h>
 #include <nn/core/device.h>
-#include <nn/kernels/elementwise_ops.h>
-#include <nn/kernels/random.h>
+#include <kernels/elementwise_ops.h>
+#include <kernels/random.h>
 
 namespace nn::kernels {
 
@@ -127,7 +127,7 @@ using SumAllFn             = void(const Stream& s, const float* X, TensorView v,
 // and the two backends can never drift out of step.
 struct KernelTable {
 #define NN_KERNEL(name, Type) Type* name = nullptr;
-#include <nn/kernels/kernel_list.def>
+#include <kernels/kernel_list.def>
 #undef NN_KERNEL
 };
 
