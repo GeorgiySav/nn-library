@@ -60,6 +60,3 @@ cmake --build build-rel --target bench_gemm bench_tape
 - Pinned memory
 
 8. Token dataset — Dataset is [N, D] float features with targets; an LM wants a token stream sliced into (x, y) shifted windows. And sampling for generation (argmax_rows is rank-2 and greedy-only).
-
-Worth knowing before it hurts
-10. unary_backward holds x and y, so every elementwise op in the graph pins two activation buffers. On a transformer that's a real memory multiplier, and the [B,T,V] logits are already the largest tensor in the model. The .def records which of x/y each derivative actually needs — that information is there, just not acted on yet

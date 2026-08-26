@@ -117,6 +117,20 @@ struct Silu {
   }
 };
 
+struct Sin {
+  static constexpr UnaryOp kOp = UnaryOp::Sin;
+  static constexpr UnaryNeeds kNeeds = UnaryNeeds::X;
+  NN_EW_INLINE static float fwd(float x) { return sinf(x); }
+  NN_EW_INLINE static float bwd(float x, float, float g) { return g * cosf(x); }
+};
+
+struct Cos {
+  static constexpr UnaryOp kOp = UnaryOp::Cos;
+  static constexpr UnaryNeeds kNeeds = UnaryNeeds::X;
+  NN_EW_INLINE static float fwd(float x) { return cosf(x); }
+  NN_EW_INLINE static float bwd(float x, float, float g) { return -g * sinf(x); }
+};
+
 namespace detail {
 
 template <class Op, class... Rest>
@@ -155,6 +169,6 @@ struct UnaryOpList {
 };
 
 using All = UnaryOpList<Neg, Abs, Sign, Relu, Exp, Log, Sqrt, Rsqrt, Recip,
-                        Tanh, Sigmoid, Gelu, Silu>;
+                        Tanh, Sigmoid, Gelu, Silu, Sin, Cos>;
 
 }  // namespace nn::kernels::unary_ops
