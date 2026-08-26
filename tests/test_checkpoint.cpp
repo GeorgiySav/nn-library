@@ -14,7 +14,7 @@
 #include <nn/core/rng.h>
 #include <nn/core/tensor.h>
 #include <nn/io/checkpoint.h>
-#include <nn/nn/module.h>
+#include <nn/module.h>
 #include <nn/optim/optim.h>
 
 namespace {

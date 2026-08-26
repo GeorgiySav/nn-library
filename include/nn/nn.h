@@ -13,7 +13,7 @@
 #include <nn/autograd/functions.h>
 #include <nn/autograd/tape.h>
 
-#include <nn/nn/module.h>
+#include <nn/module.h>
 #include <nn/optim/optim.h>
 
 #include <nn/data/dataset.h>

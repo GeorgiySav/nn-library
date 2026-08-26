@@ -12,7 +12,7 @@
 #include <nn/core/rng.h>
 #include <nn/core/tensor.h>
 #include <kernels/random.h>
-#include <nn/nn/module.h>
+#include <nn/module.h>
 #include <nn/ops/ops.h>
 
 namespace {

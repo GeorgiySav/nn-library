@@ -8,7 +8,9 @@
 #include <nn/autograd/functions.h>
 #include <nn/autograd/tape.h>
 #include <nn/core/tensor.h>
-#include <nn/nn/module.h>
+#include <nn/module/embedding.h>
+#include <nn/module/linear.h>
+#include <nn/module/norm.h>
 #include <nn/optim/optim.h>
 
 namespace {

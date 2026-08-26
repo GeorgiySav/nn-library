@@ -5,8 +5,11 @@
 #include <vector>
 
 #include <nn/core/state.h>
-#include <nn/nn/module.h>
 #include <nn/optim/optim.h>
+
+namespace nn {
+class Module;
+}
 
 namespace nn::io {
 

@@ -5,7 +5,7 @@
 
 #include <nn/core/tensor.h>
 #include <nn/autograd/functions.h>
-#include <nn/nn/module.h>
+#include <nn/module/embedding.h>
 #include <nn/ops/ops.h>
 
 NN_TEST(test_tensor_zeros) {

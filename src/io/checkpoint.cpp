@@ -9,6 +9,7 @@
 
 #include <nn/core/allocator.h>
 #include <nn/core/rng.h>
+#include <nn/module/module.h>
 
 namespace nn {
 
