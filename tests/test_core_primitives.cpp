@@ -1,8 +1,11 @@
 #include "test_harness.h"
 
+#include <stdexcept>
+
 #include <nn/core/small_vec.h>
 #include <nn/core/shape.h>
 #include <nn/core/rng.h>
+#include <nn/core/tensor.h>
 
 NN_TEST(test_small_vec) {
   nn::SmallVec<int, 4> v;
@@ -49,6 +52,26 @@ NN_TEST(test_shape) {
 
   std::string str = s1.str();
   NN_CHECK(str == "[2, 3, 4]");
+}
+
+NN_TEST(extent_resolves_negative_axes_and_rejects_bad_ones) {
+  const nn::Shape s{2, 3, 4};
+
+  NN_CHECK(s.extent(0) == 2);
+  NN_CHECK(s.extent(2) == 4);
+  NN_CHECK(s.extent(-1) == 4);
+  NN_CHECK(s.extent(-2) == 3);
+  NN_CHECK(s.extent(-3) == 2);
+
+  NN_CHECK_THROWS(s.extent(3), std::invalid_argument);
+  NN_CHECK_THROWS(s.extent(-4), std::invalid_argument);
+  NN_CHECK_THROWS(nn::Shape().extent(0), std::invalid_argument);
+
+  const nn::Tensor t = nn::Tensor::zeros({5, 7});
+  NN_CHECK(t.rank() == 2);
+  NN_CHECK(t.extent(0) == 5);
+  NN_CHECK(t.extent(-1) == 7);
+  NN_CHECK_THROWS(t.extent(2), std::invalid_argument);
 }
 
 NN_TEST(test_pcg32) {

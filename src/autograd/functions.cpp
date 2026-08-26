@@ -202,7 +202,7 @@ Tensor permute(const Tensor& x, std::span<const int> order) {
   SmallVec<int, kMaxShapeRank> axes(order.size()), inv(order.size());
   bool seen[kMaxShapeRank] = {false};
   for (int i{0}; i < r; ++i) {
-    const int src = ops::normalise_dim(order[i], r, "permute");
+    const int src = x.shape().resolve_dim(order[i], "permute");
     if (seen[src]) {
       throw std::invalid_argument("permute: axis " + std::to_string(src) +
                                   " appears twice in the order");
@@ -224,8 +224,8 @@ Tensor permute(const Tensor& x, std::span<const int> order) {
 
 Tensor transpose(const Tensor& x, int a, int b) {
   const int r = x.shape().rank();
-  const int ia = ops::normalise_dim(a, r, "transpose");
-  const int ib = ops::normalise_dim(b, r, "transpose");
+  const int ia = x.shape().resolve_dim(a, "transpose");
+  const int ib = x.shape().resolve_dim(b, "transpose");
 
   int order[kMaxShapeRank];
   for (int i = 0; i < r; ++i) order[i] = i;
@@ -251,7 +251,7 @@ Tensor reshape(const Tensor& x, const Shape& shape) {
 }
 
 Tensor slice(const Tensor& x, int axis, int64_t start, int64_t len) {
-  const int a = ops::normalise_dim(axis, x.shape().rank(), "slice");
+  const int a = x.shape().resolve_dim(axis, "slice");
   Tensor out = x.slice_view(a, start, len);
 
   record_op(out, "slice",
@@ -300,7 +300,7 @@ Tensor sum_all(const Tensor& x) {
 }
 
 Tensor sum(const Tensor& x, int dim, bool keepdim) {
-  const int d = ops::normalise_dim(dim, x.shape().rank(), "sum");
+  const int d = x.shape().resolve_dim(dim, "sum");
   Tensor out = ops::sum_dim(x, d, keepdim);
 
   record_op(out, "sum",
@@ -319,13 +319,13 @@ Tensor mean(const Tensor& x) {
 }
 
 Tensor mean(const Tensor& x, int dim, bool keepdim) {
-  const int d = ops::normalise_dim(dim, x.shape().rank(), "mean");
+  const int d = x.shape().resolve_dim(dim, "mean");
   const int n = x.shape().dim(d);
   return scalar(ops::ScalarOp::MulScalar, sum(x, d, keepdim), 1.0f / float(n));
 }
 
 Tensor var(const Tensor& x, int dim, bool keepdim, bool unbiased) {
-  const int d = ops::normalise_dim(dim, x.shape().rank(), "var");
+  const int d = x.shape().resolve_dim(dim, "var");
   const int n = x.shape().dim(d);
   const int denom = unbiased ? (n - 1) : n;
   if (denom <= 0) {
@@ -363,7 +363,7 @@ Tensor cat(std::span<const Tensor> parts, int dim) {
   }
 
   const Shape& first = parts[0].shape();
-  const int d = ops::normalise_dim(dim, first.rank(), "cat");
+  const int d = first.resolve_dim(dim, "cat");
 
   int total = 0;
   for (const Tensor& p : parts) {

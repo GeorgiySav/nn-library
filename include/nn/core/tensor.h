@@ -38,6 +38,9 @@ public:
 
   const Shape& shape() const { return shape_; }
   int64_t numel() const { return shape_.numel(); }
+
+  int rank() const { return shape_.rank(); }
+  int extent(int axis) const { return shape_.extent(axis); }
   Device device() const { return storage_->device(); }
   DType dtype() const { return dtype_; }
   bool defined() const { return storage_ != nullptr; }

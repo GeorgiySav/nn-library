@@ -172,7 +172,7 @@ Tensor Tensor::permute_view(std::span<const int> order) const {
   Strides new_strides(r);
   bool seen[kMaxShapeRank] = {false};
   for (int i = 0; i < r; ++i) {
-    const int src = ops::normalise_dim(order[i], r, "permute");
+    const int src = shape_.resolve_dim(order[i], "permute");
     if (seen[src]) {
       throw std::invalid_argument("permute: axis " + std::to_string(src) +
                                   " appears twice in the order");
@@ -191,8 +191,8 @@ Tensor Tensor::permute_view(std::initializer_list<int> order) const {
 
 Tensor Tensor::transpose_view(int a, int b) const {
   const int r = shape_.rank();
-  const int ia = ops::normalise_dim(a, r, "transpose");
-  const int ib = ops::normalise_dim(b, r, "transpose");
+  const int ia = shape_.resolve_dim(a, "transpose");
+  const int ib = shape_.resolve_dim(b, "transpose");
 
   int order[kMaxShapeRank];
   for (int i = 0; i < r; ++i) order[i] = i;
@@ -207,7 +207,7 @@ Tensor Tensor::reshape_view(Shape s) const {
 }
 
 Tensor Tensor::slice_view(int axis, int64_t start, int64_t len) const {
-  const int a = ops::normalise_dim(axis, shape_.rank(), "slice");
+  const int a = shape_.resolve_dim(axis, "slice");
   if (start < 0 || len < 0 || start + len > shape_.dim(a)) {
     throw std::invalid_argument("slice: [" + std::to_string(start) + ", " +
                                 std::to_string(start + len) + ") is out of range for axis " +

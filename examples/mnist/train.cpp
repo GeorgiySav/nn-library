@@ -26,7 +26,7 @@ float accuracy(nn::Module& model, nn::data::DataLoader<>& loader) {
     correct += nn::metrics::count_correct(
                 model(xb).to(nn::Device::CPU),
                 yb.to(nn::Device::CPU));
-    total   += yb.shape().dim(0);
+    total   += yb.extent(0);
   }
   return float(correct) / float(total);
 }

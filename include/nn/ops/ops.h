@@ -73,7 +73,5 @@ void adam(const Tensor& p, const Tensor& g, Tensor& m, Tensor& v,
 void pack(const Tensor& dst, const Tensor& src);
 void unpack(Tensor& dst, const Tensor& src);
 
-// Resolve a possibly-negative axis index against a rank, the numpy way.
-int normalise_dim(int dim, int rank, const char* op);
 
 }
