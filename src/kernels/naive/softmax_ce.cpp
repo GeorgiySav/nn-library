@@ -7,7 +7,7 @@
 
 namespace nn::kernels {
 
-void naive_softmax_ce(const Stream& s, const float* logits, const int32_t* labels,
+void naive_softmax_ce(const Stream&, const float* logits, const int32_t* labels,
                       float* loss_out, float* probs, int M, int N, int64_t sz) {
   /*
   logits: [M, N], row stride sz (== N when dense); probs is dense output
@@ -56,7 +56,7 @@ void naive_softmax_ce(const Stream& s, const float* logits, const int32_t* label
   *loss_out = (M > 0) ? total_loss / static_cast<float>(M) : 0.0f;
 }
 
-void naive_softmax_ce_backward(const Stream& s, const float* probs, const int32_t* labels,
+void naive_softmax_ce_backward(const Stream&, const float* probs, const int32_t* labels,
                                const float* g_loss, float* g_logits, int M, int N, int64_t sp) {
   /*
   probs: [M, N] (softmax probabilities), row stride sp; g_logits is dense output

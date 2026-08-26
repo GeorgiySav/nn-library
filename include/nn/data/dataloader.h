@@ -81,7 +81,7 @@ private:
   }
 
   uint32_t bounded(uint32_t n) {
-    const int32_t threshold = (0u - n) % n;
+    const uint32_t threshold = (0u - n) % n;
     uint32_t v;
     do { v = rng_.next_uint32(); } while (v < threshold);
     return v % n;

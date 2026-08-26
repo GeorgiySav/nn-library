@@ -35,14 +35,14 @@ Tensor Tensor::zeros(Shape s, Device d, DType t) {
 Tensor Tensor::full(Shape s, float value, Device d, DType t) {
   return host_init(s, d, t, [value](Tensor& h) {
     float* data = h.host_data();
-    for (size_t i{0u}; i < h.numel(); ++i) data[i] = value;
+    for (int64_t i{0}; i < h.numel(); ++i) data[i] = value;
   });
 }
 
 Tensor Tensor::randn(Shape s, Pcg32& rng, float stddev, Device d, DType t) {
   return host_init(s, d, t, [&](Tensor& h) {
     float* data = h.host_data();
-    for (size_t i{0u}; i < h.numel(); ++i) data[i] = rng.next_normal() * stddev;
+    for (int64_t i{0}; i < h.numel(); ++i) data[i] = rng.next_normal() * stddev;
   });
 }
 

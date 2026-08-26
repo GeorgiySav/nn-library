@@ -6,7 +6,7 @@
 
 namespace nn::kernels {
 
-void naive_argmax_rows(const Stream& s, const float* X, int32_t* out, int M, int N, int64_t sx) {
+void naive_argmax_rows(const Stream&, const float* X, int32_t* out, int M, int N, int64_t sx) {
   for (int i = 0; i < M; ++i) {
     const float* row = X + int64_t(i) * sx;
     int best = 0;
