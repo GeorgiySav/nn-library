@@ -3,7 +3,7 @@
 namespace nn {
 
 enum class Device { CPU, CUDA };
-inline const char* device_name(Device d) {
+constexpr const char* device_name(Device d) {
   switch (d) {
     case Device::CPU:
       return "CPU";

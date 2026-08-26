@@ -11,8 +11,8 @@ namespace nn {
 
 class Shape {
 public:
-  Shape() = default;
-  Shape(std::initializer_list<int> dims) {
+  constexpr Shape() = default;
+  constexpr Shape(std::initializer_list<int> dims) {
     assert(dims.size() <= kMaxShapeRank);
     rank_ = dims.size();
     int i = 0;
@@ -20,7 +20,7 @@ public:
       dims_[i++] = d;
     }
   }
-  Shape(std::span<const int> dims) {
+  constexpr Shape(std::span<const int> dims) {
     assert(dims.size() <= kMaxShapeRank);
     rank_ = dims.size();
     for (int i = 0; i < rank_; ++i) {
@@ -28,19 +28,19 @@ public:
     }
   }
 
-  int rank() const { return rank_; }
-  
-  int dim(int i) const {
+  constexpr int rank() const { return rank_; }
+
+  constexpr int dim(int i) const {
     assert(i >= 0 && i < rank_);
     return dims_[i];
   }
 
-  void set_dim(int i, int d) {
+  constexpr void set_dim(int i, int d) {
     assert(i >= 0 && i < rank_);
     dims_[i] = d;
   }
 
-  int64_t numel() const {
+  constexpr int64_t numel() const {
     int64_t n = 1;
     for (int i = 0; i < rank_; ++i) {
       n *= dims_[i];
@@ -48,7 +48,7 @@ public:
     return n;
   }
 
-  bool operator==(const Shape& other) const = default; 
+  constexpr bool operator==(const Shape& other) const = default;
 
   std::string str() const {
     std::string s = "[";
@@ -69,7 +69,7 @@ private:
 
 // numpy broadcasting: align from the right, each axis must match or be 1.
 // Missing leading axes on the shorter shape count as 1.
-inline Shape broadcast_shapes(const Shape& a, const Shape& b) {
+constexpr Shape broadcast_shapes(const Shape& a, const Shape& b) {
   const int r = (a.rank() > b.rank()) ? a.rank() : b.rank();
   int dims[kMaxShapeRank] = {0};
   for (int i = 0; i < r; ++i) {

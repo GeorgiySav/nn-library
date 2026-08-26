@@ -15,10 +15,10 @@ namespace {
 
 constexpr int kNumDevices = 2;  // CPU, CUDA
 
-int index_of(Device d) { return static_cast<int>(d); }
+constexpr int index_of(Device d) { return static_cast<int>(d); }
 
-KernelTable g_tables[kNumDevices];
-const char* g_backend[kNumDevices] = {"none", "none"};
+constinit KernelTable g_tables[kNumDevices];
+constinit const char* g_backend[kNumDevices] = {"none", "none"};
 
 } // namespace
 

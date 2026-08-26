@@ -9,10 +9,10 @@ namespace nn {
 
 class Strides {
 public:
-  Strides() = default;
-  explicit Strides(int rank) : rank_(rank) {}
+  constexpr Strides() = default;
+  constexpr explicit Strides(int rank) : rank_(rank) {}
 
-  static Strides contiguous_for(const Shape& s) {
+  static constexpr Strides contiguous_for(const Shape& s) {
     Strides st(s.rank());
     int64_t acc = 1;
     for (int i = s.rank() - 1; i >= 0; --i) {
@@ -22,14 +22,14 @@ public:
     return st;
   }
 
-  int rank() const { return rank_; }
-  int64_t at(int i) const { 
+  constexpr int rank() const { return rank_; }
+  constexpr int64_t at(int i) const {
     assert(i >= 0 && i < rank_);
-    return v_[i]; 
+    return v_[i];
   }
-  int64_t& at(int i) { 
+  constexpr int64_t& at(int i) {
     assert(i >= 0 && i < rank_);
-    return v_[i]; 
+    return v_[i];
   }
 
 private:

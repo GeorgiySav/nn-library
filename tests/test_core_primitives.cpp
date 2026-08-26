@@ -42,6 +42,11 @@ NN_TEST(test_shape) {
   NN_CHECK(s1 == s2);
   NN_CHECK(s1 != s3);
 
+  NN_CHECK(s1 != nn::Shape({2, 3}));
+
+  NN_CHECK(nn::Shape().rank() == 0);
+  NN_CHECK(nn::Shape().numel() == 1);   // empty product, not zero
+
   std::string str = s1.str();
   NN_CHECK(str == "[2, 3, 4]");
 }

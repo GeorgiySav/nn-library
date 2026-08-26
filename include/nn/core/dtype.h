@@ -7,7 +7,7 @@ namespace nn {
 
 enum class DType { F32, I32 };
 
-inline size_t dtype_size(DType dtype) {
+constexpr size_t dtype_size(DType dtype) {
   switch (dtype) {
     case DType::F32:
       return sizeof(float);
@@ -18,7 +18,7 @@ inline size_t dtype_size(DType dtype) {
   }
 }
 
-inline const char* dtype_name(DType dtype) {
+constexpr const char* dtype_name(DType dtype) {
   switch (dtype) {
     case DType::F32:
       return "float32";

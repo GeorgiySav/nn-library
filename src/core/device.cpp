@@ -26,9 +26,9 @@ int cuda_device_count() {
 namespace {
  
 constexpr int kNumDevices = 2;
-int index_of(Device d) { return static_cast<int>(d); }  
+constexpr int index_of(Device d) { return static_cast<int>(d); }
 
-thread_local std::array<const Stream*, kNumDevices> t_current{nullptr, nullptr};
+constinit thread_local std::array<const Stream*, kNumDevices> t_current{nullptr, nullptr};
 
 }
 
