@@ -23,13 +23,11 @@ public:
   }
 
   constexpr int rank() const { return rank_; }
-  constexpr int64_t at(int i) const {
-    assert(i >= 0 && i < rank_);
-    return v_[i];
-  }
-  constexpr int64_t& at(int i) {
-    assert(i >= 0 && i < rank_);
-    return v_[i];
+
+  template <class Self>
+  constexpr auto& at(this Self& self, int i) {
+    assert(i >= 0 && i < self.rank_);
+    return self.v_[i];
   }
 
 private:
