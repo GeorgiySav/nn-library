@@ -125,7 +125,7 @@ target_include_directories(nn PUBLIC include)
 # Backend-private headers (cuda_common.h, and naive_kernels.h by its own path).
 # PRIVATE: consumers must never see these, and cuda_common.h in particular
 # would drag <cuda_runtime.h> onto the public surface.
-target_include_directories(nn PRIVATE src)
+target_include_directories(nn PRIVATE src third_party)
 target_link_libraries(nn PUBLIC nn_flags)
 if(NN_WITH_CUDA)
   target_link_libraries(nn PUBLIC CUDA::cudart CUDA::cublas)
