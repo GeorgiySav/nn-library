@@ -38,6 +38,50 @@ void cuda_argmax_rows(const Stream& s, const float* X, int32_t* out, int M, int 
   NN_CUDA_CHECK_LAUNCH(stream);
 }
 
+__global__ void topk_rows_kernel(const float* X, int M, int N, int k,
+                              float* values, int32_t* indices, int64_t sx) {
+  extern __shared__ int excluded[];  // k entries, indices already taken this row
+  const ArgMax kIdentity{-FLT_MAX, INT_MAX};
+
+  for (int64_t row = blockIdx.x; row < M; row += gridDim.x) {
+    const float* r = X + int64_t(row) * sx;
+
+    for (int iter = 0; iter < k; ++iter) {
+      ArgMax best = kIdentity;
+      for (int c = threadIdx.x; c < N; c += blockDim.x) {
+        bool taken = false;
+        for (int e = 0; e < iter; ++e) {
+          if (excluded[e] == c) { taken = true; break; }
+        }
+        if (!taken && r[c] > best.value) best = ArgMax{r[c], c};
+      }
+
+      best = block_reduce(best, MaxKeepLowestIndex(), kIdentity);
+
+      if (threadIdx.x == 0) {
+        values[row * k + iter] = best.value;
+        indices[row * k + iter] = best.index;
+        excluded[iter] = best.index;
+      }
+      __syncthreads();
+    }
+  }
+}
+
+void cuda_topk_rows(const Stream& s, const float* X, int M, int N, int k,
+                    float* values, int32_t* indices, int64_t sx) {
+  if (M == 0 || N == 0 || k == 0) return;
+
+  auto stream = static_cast<cudaStream_t>(s.handle);
+  constexpr int block{256};
+  constexpr int kMaxGrid{4096};
+  int grid = std::min(M, kMaxGrid);
+  const size_t shared_bytes = size_t(k) * sizeof(int);
+
+  topk_rows_kernel<<<grid, block, shared_bytes, stream>>>(X, M, N, k, values, indices, sx);
+  NN_CUDA_CHECK_LAUNCH(stream);
+}
+
 namespace {
 
 constexpr int kSumBlock = 256;

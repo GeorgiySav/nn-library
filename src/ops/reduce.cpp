@@ -99,4 +99,19 @@ Tensor argmax_rows(const Tensor& x) {
   return out;
 }
 
+void topk_rows(const Tensor& x, int k, Tensor& values, Tensor& indices) {
+  if (x.shape().rank() != 2) throw std::invalid_argument("topk_rows: x must be 2D");
+  const int N = x.shape().dim(1);
+  if (k <= 0 || k > N) {
+    throw std::invalid_argument("topk_rows: k must be in (0, " + std::to_string(N) + "]");
+  }
+
+  values = Tensor(Shape{x.shape().dim(0), k}, x.device(), x.dtype());
+  indices = Tensor(Shape{x.shape().dim(0), k}, x.device(), DType::I32);
+
+  const auto& kk = nn::kernels::kernels(x.device());
+  kk.topk_rows(current_stream(x.device()), x.device_ptr(), x.shape().dim(0), N, k,
+               values.device_ptr(), indices.device_ptr_i32(), row_stride_of(x, "topk_rows"));
+}
+
 }  // namespace nn::ops

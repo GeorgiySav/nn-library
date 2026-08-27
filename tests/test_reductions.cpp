@@ -5,6 +5,7 @@
 #include "devices.h"
 #include "gradcheck.h"
 
+#include <algorithm>
 #include <cmath>
 #include <functional>
 #include <stdexcept>
@@ -21,6 +22,11 @@ namespace {
 std::vector<float> host_of(const nn::Tensor& t) {
   const nn::Tensor h = t.pack().to(nn::Device::CPU);
   return std::vector<float>(h.host_data(), h.host_data() + h.numel());
+}
+
+std::vector<int32_t> host_of_i32(const nn::Tensor& t) {
+  const nn::Tensor h = t.pack().to(nn::Device::CPU);
+  return std::vector<int32_t>(h.host_data_i32(), h.host_data_i32() + h.numel());
 }
 
 nn::Tensor ramp(nn::Shape s, nn::Device d, float start = -1.3f, float step = 0.17f) {
@@ -538,5 +544,33 @@ NN_TEST(gradcheck_cat) {
     nn::Tensor t = nn::Tensor::randn({2, 3}, rng, 0.6f, dev);
     t.set_requires_grad(true);
     NN_CHECK(grad_error(t, [&] { return nn::cat({t, t}, 0); }) < 2e-2f);
+  }
+}
+
+NN_TEST(test_topk) {
+  NN_TEST_FOR_EACH_DEVICE(dev) {
+    nn::Pcg32 rng(61);
+    const int M = 4, N = 7, K = 3;
+    const nn::Tensor x = nn::Tensor::randn({M, N}, rng, 1.0f, dev);
+
+    nn::Tensor values, indices;
+    nn::ops::topk_rows(x, K, values, indices);
+
+    NN_CHECK(values.shape() == nn::Shape({M, K}));
+    NN_CHECK(indices.shape() == nn::Shape({M, K}));
+
+    const std::vector<float> hx = host_of(x);
+    const std::vector<float> hv = host_of(values);
+    const std::vector<int32_t> hi = host_of_i32(indices);
+
+    for (int i = 0; i < M; ++i) {
+      std::vector<std::pair<float, int>> row;
+      for (int j = 0; j < N; ++j) row.emplace_back(hx[size_t(i) * N + j], j);
+      std::sort(row.begin(), row.end(), std::greater<>());
+      for (int k = 0; k < K; ++k) {
+        NN_CHECK_CLOSE(hv[size_t(i) * K + k], row[k].first, 1e-5);
+        NN_CHECK(hi[size_t(i) * K + k] == row[k].second);
+      }
+    }
   }
 }

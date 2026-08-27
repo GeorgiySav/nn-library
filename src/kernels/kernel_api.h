@@ -51,6 +51,8 @@ using AdamStepFn          = void(const Stream& s, float* p, const float* g, floa
                                     float bc1, float bc2, int64_t n);
 using ArgmaxRowsFn        = void(const Stream& s, const float* X, int32_t* out,
                                     int M, int N, int64_t sx);
+using TopkRowsFn          = void(const Stream& s, const float* X, int M, int N, int k,
+                                    float* values, int32_t* indices, int64_t sx);
 
 // The elementwise family. One slot per arity rather than per op: the op code
 // selects the arithmetic inside the kernel, from elementwise_ops.h.

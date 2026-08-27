@@ -32,6 +32,7 @@ NN_KERNEL(scalar_backward,       ScalarBackwardFn)
 NN_KERNEL(argmax_rows,           ArgmaxRowsFn)
 NN_KERNEL(sum_to,                SumToFn)
 NN_KERNEL(sum_all,               SumAllFn)
+NN_KERNEL(topk_rows,             TopkRowsFn)
 
 // whole-buffer writes that are not elementwise maps
 NN_KERNEL(axpy,                  AxpyFn)

@@ -1,5 +1,9 @@
 #include "naive_kernels.h"
 
+#include <algorithm>
+#include <utility>
+#include <vector>
+
 #include <nn/core/device.h>
 
 #include "../strided_index.h"
@@ -32,6 +36,21 @@ void naive_sum_all(const Stream&, const float* X, TensorView v, Accum a,
   double acc = 0.0;
   for (int64_t i = 0; i < n; ++i) acc += double(apply_accum(a, X[offset_of(v, i)]));
   *out = float(acc);
+}
+
+void naive_topk_rows(const Stream&, const float* X, int M, int N, int k,
+                   float* values, int32_t* indices, int64_t sx) {
+  for (int i = 0; i < M; ++i) {
+    const float* row = X + int64_t(i) * sx;
+    std::vector<std::pair<float, int>> pairs(N);
+    for (int j = 0; j < N; ++j) pairs[j] = {row[j], j};
+    std::partial_sort(pairs.begin(), pairs.begin() + k, pairs.end(),
+                      [](const auto& a, const auto& b) { return a.first > b.first; });
+    for (int j = 0; j < k; ++j) {
+      values[i * k + j] = pairs[j].first;
+      indices[i * k + j] = pairs[j].second;
+    }
+  }
 }
 
 }
