@@ -46,6 +46,7 @@ Tensor embedding(const Tensor& weight, const Tensor& idx);
 
 Tensor layer_norm(const Tensor& x, const Tensor& weight, const Tensor& bias,
                   float eps = 1e-5f);
+Tensor rms_norm(const Tensor& x, const Tensor& weight, float eps = 1e-6f);
 
 Tensor cat(std::span<const Tensor> parts, int dim);
 Tensor cat(std::initializer_list<Tensor> parts, int dim);
@@ -68,6 +69,7 @@ using autograd::transpose;
 using autograd::cross_entropy;
 using autograd::dropout;
 using autograd::layer_norm;
+using autograd::rms_norm;
 using autograd::masked_fill;
 using autograd::softmax;
 using autograd::embedding;

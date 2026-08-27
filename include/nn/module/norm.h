@@ -34,4 +34,24 @@ private:
   float eps_;
 };
 
+class RMSNorm : public Module {
+public:
+  explicit RMSNorm(int features, float eps=1e-6f)
+    : w_(Tensor::full({features}, 1.0f)), eps_(eps) {
+    w_.set_requires_grad(true);
+  }
+
+  Tensor forward(const Tensor& x) override {
+    return autograd::rms_norm(x, w_, eps_);
+  }
+
+  void collect_named(const std::string& prefix, std::vector<NamedTensor>& out) override {
+    out.push_back({prefix + "w", &w_});
+  }
+
+private:
+  Tensor w_;
+  float eps_;
+};
+
 }  // namespace nn

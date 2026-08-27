@@ -74,6 +74,17 @@ Tensor layer_norm(const Tensor& x, const Tensor& weight, const Tensor& bias, flo
   return out;
 }
 
+Tensor rms_norm(const Tensor& x, const Tensor& weight, float eps) {
+  const int last = x.shape().rank() - 1;
+  const Tensor v = mean(binary(ops::BinaryOp::Mul, x, x), last, /*keepdim=*/true);
+  const Tensor inv = unary(ops::UnaryOp::Rsqrt,
+                           scalar(ops::ScalarOp::AddScalar, v, eps));
+
+  Tensor out = binary(ops::BinaryOp::Mul, x, inv);
+  if (weight.defined()) out = binary(ops::BinaryOp::Mul, out, weight);
+  return out;
+}
+
 // Likewise composed: keep * x + value * mask. The mask itself carries no
 // gradient, so the two scalar ops run through nn::ops and stay off the tape.
 Tensor masked_fill(const Tensor& x, const Tensor& mask, float value) {
