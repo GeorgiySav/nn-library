@@ -2,7 +2,9 @@
 
 namespace nn {
 
-MultiHeadAttention::MultiHeadAttention(int embed_dim, int num_heads, Pcg32& rng)
+MultiHeadAttention::MultiHeadAttention(int embed_dim,
+                                       int num_heads,
+                                       Pcg32& rng)
     : embed_dim_(embed_dim),
       num_heads_(num_heads),
       dk_(embed_dim / num_heads),
@@ -10,7 +12,9 @@ MultiHeadAttention::MultiHeadAttention(int embed_dim, int num_heads, Pcg32& rng)
       wK_(Linear(embed_dim, embed_dim, rng)),
       wV_(Linear(embed_dim, embed_dim, rng)),
       wO_(Linear(embed_dim, embed_dim, rng))
-      {}
+      {
+  if (embed_dim_ % num_heads_ != 0) throw std::invalid_argument("MultiHeadAttention: embedding dim must be divisible by the number of heads");
+}
 
 Tensor MultiHeadAttention::forward(const Tensor& Q, const Tensor& K, const Tensor& V) {
   // Q, K, V: [b, t, e]
