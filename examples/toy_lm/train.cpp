@@ -97,16 +97,16 @@ public:
 
   Tensor forward(const Tensor& x) override {
     // x: [b, t]
-    Tensor t_embed = token_embed_(x); // [b, t, e]
-    Tensor l = layers_(t_embed); // [b, t, e]
+    Tensor t_embed = token_embed_.forward(x); // [b, t, e]
+    Tensor l = layers_.forward(t_embed); // [b, t, e]
 
     Tensor m = l.transpose(-2, -1).contiguous();   // [b, e, t]
-    m = mix_drop_(m);
-    m = mix1_(m).relu();
-    m = mix2_(m).relu();
+    m = mix_drop_.forward(m);
+    m = mix1_.forward(m).relu();
+    m = mix2_.forward(m).relu();
     m = m.transpose(-2, -1).contiguous();          // [b, t, e]
 
-    Tensor logits = head_(m); // [b, t, v]
+    Tensor logits = head_.forward(m); // [b, t, v]
     return logits;
   }
 
@@ -191,7 +191,7 @@ int main() {
         opt.zero_grad();
 
         autograd::GradScope grad;
-        Tensor logits = model(xb);   // [b, t, v]
+        Tensor logits = model.forward(xb);   // [b, t, v]
 
         // cross_entropy wants rank-2 logits and rank-1 labels
         const int B = logits.extent(0),

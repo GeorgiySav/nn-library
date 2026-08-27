@@ -22,8 +22,6 @@ public:
       stride_(stride) {
     if (window <= 0) throw std::invalid_argument("TokenDataset: window must be > 0");
     if (stride <= 0) throw std::invalid_argument("TokenDataset: stride must be > 0");
-    // get() reads window_ + 1 ids per row (x, and y shifted by one), so
-    // count_ == window_ is one short, not enough.
     if (count_ <= window_) {
       throw std::invalid_argument("TokenDataset: not enough tokens for window");
     }

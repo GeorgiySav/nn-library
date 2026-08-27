@@ -229,17 +229,6 @@ NN_TEST(retain_graph_lets_backward_run_twice) {
   }
 }
 
-NN_TEST(module_is_callable) {
-  NN_TEST_FOR_EACH_DEVICE(dev) {
-    nn::Pcg32 rng(37);
-    nn::Sequential model(nn::Linear(6, 8, rng), nn::ReLu(), nn::Linear(8, 3, rng));
-    model.to(dev);
-
-    const nn::Tensor x = nn::Tensor::randn({4, 6}, rng, 1.0f, dev);
-    same_values(model(x), model.forward(x));
-  }
-}
-
 NN_TEST(the_new_layers_train_end_to_end) {
   NN_TEST_FOR_EACH_DEVICE(dev) {
     nn::Pcg32 rng(41);
@@ -254,7 +243,7 @@ NN_TEST(the_new_layers_train_end_to_end) {
     for (int step = 0; step < 40; ++step) {
       model.zero_grad();
       nn::autograd::GradScope grad;
-      const nn::Tensor loss = nn::cross_entropy(model(x), labels);
+      const nn::Tensor loss = nn::cross_entropy(model.forward(x), labels);
       loss.backward();
 
       const float value = loss.item();

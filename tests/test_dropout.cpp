@@ -225,18 +225,18 @@ NN_TEST(eval_mode_is_the_identity_and_records_nothing) {
 
     drop.eval();
     NN_CHECK(!drop.training());
-    const nn::Tensor same = drop(x);
+    const nn::Tensor same = drop.forward(x);
     NN_CHECK(same.device_ptr() == x.device_ptr());   // not even a copy
     NN_CHECK(tape.size() == 0);                      // and no node
 
     drop.train();
-    const nn::Tensor dropped = drop(x);
+    const nn::Tensor dropped = drop.forward(x);
     NN_CHECK(dropped.device_ptr() != x.device_ptr());
     NN_CHECK(tape.size() > 0);
 
     // p == 0 is the identity in training mode too
     nn::Dropout none(0.0f);
-    NN_CHECK(none(x).device_ptr() == x.device_ptr());
+    NN_CHECK(none.forward(x).device_ptr() == x.device_ptr());
   }
 }
 
@@ -250,14 +250,14 @@ NN_TEST(sequential_propagates_train_and_eval_to_its_children) {
   // in eval the model is deterministic; in training it is not
   model.eval();
   NN_CHECK(!model.training());
-  const std::vector<float> a = host_of(model(x)), b = host_of(model(x));
+  const std::vector<float> a = host_of(model.forward(x)), b = host_of(model.forward(x));
   for (size_t i = 0; i < a.size(); ++i) NN_CHECK_CLOSE(a[i], b[i], 0.0f);
 
   model.train();
   NN_CHECK(model.training());
   int differing = 0;
   for (int trial = 0; trial < 8; ++trial) {
-    const std::vector<float> c = host_of(model(x)), d = host_of(model(x));
+    const std::vector<float> c = host_of(model.forward(x)), d = host_of(model.forward(x));
     for (size_t i = 0; i < c.size(); ++i) differing += (c[i] != d[i]);
   }
   NN_CHECK(differing > 0);   // the Dropout in the middle is live again

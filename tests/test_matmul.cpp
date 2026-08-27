@@ -260,11 +260,11 @@ NN_TEST(linear_accepts_a_batched_input) {
     fc.to(dev);
 
     const nn::Tensor x = spread(nn::Shape({B, T, C}), dev, 20);
-    const nn::Tensor y = fc(x);
+    const nn::Tensor y = fc.forward(x);
     NN_CHECK(y.shape() == nn::Shape({B, T, K}));
 
     // the same weights applied to the flattened batch
-    const nn::Tensor flat = fc(x.reshape_view(nn::Shape({B * T, C})));
+    const nn::Tensor flat = fc.forward(x.reshape_view(nn::Shape({B * T, C})));
     const std::vector<float> a = host_of(y), b = host_of(flat);
     for (size_t i = 0; i < a.size(); ++i) NN_CHECK_CLOSE(a[i], b[i], 1e-6);
   }

@@ -179,7 +179,7 @@ NN_TEST(clipping_shortens_a_step_without_turning_it) {
 
       {
         nn::autograd::GradScope grad;
-        nn::Tensor loss = nn::cross_entropy(fc(x), labels);
+        nn::Tensor loss = nn::cross_entropy(fc.forward(x), labels);
         loss.backward();
       }
 

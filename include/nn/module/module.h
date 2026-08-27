@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -11,15 +12,14 @@ namespace nn {
 class Module {
 public:
   virtual ~Module() = default;
-  virtual Tensor forward(const Tensor& x) = 0;
+
+  virtual Tensor forward(const Tensor&) {
+    throw std::logic_error("Module::forward(x): not implemented for this module");
+  }
 
   // name what you own, under the path you were given.
   virtual void collect_named(const std::string& prefix,
                             std::vector<NamedTensor>& out) = 0;
-
-  // So a call site reads `model(x)`. Non-virtual on purpose: overriding
-  // forward is the extension point, and this only spells it differently.
-  Tensor operator()(const Tensor& x) { return forward(x); }
 
   std::vector<NamedTensor> named_parameters() {
     std::vector<NamedTensor> v;

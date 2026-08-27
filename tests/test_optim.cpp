@@ -240,7 +240,7 @@ NN_TEST(adamw_trains_a_linear_layer) {
     for (int i = 0; i < 40; ++i) {
       opt.zero_grad();
       nn::autograd::GradScope grad;
-      nn::Tensor loss = nn::cross_entropy(fc(x), labels);
+      nn::Tensor loss = nn::cross_entropy(fc.forward(x), labels);
       last = loss.item();
       if (i == 0) first = last;
       loss.backward();
@@ -374,7 +374,7 @@ NN_TEST(a_scheduled_run_trains) {
         if (scheduled && s + 1 == steps) NN_CHECK(opt.lr() < 0.01f * 0.05f);
         opt.zero_grad();
         nn::autograd::GradScope grad;
-        nn::Tensor loss = nn::cross_entropy(fc(x), labels);
+        nn::Tensor loss = nn::cross_entropy(fc.forward(x), labels);
         loss_v = loss.item();
         loss.backward();
         opt.step();

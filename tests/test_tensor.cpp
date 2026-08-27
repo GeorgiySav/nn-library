@@ -166,7 +166,7 @@ NN_TEST(test_tensor_arange_feeds_embedding) {
     pos.to(dev);
 
     const nn::Tensor idx = nn::Tensor::arange(8, dev);
-    const nn::Tensor emb = pos(idx);
+    const nn::Tensor emb = pos.forward(idx);
     NN_CHECK(emb.shape() == nn::Shape({8, 4}));
   }
 }

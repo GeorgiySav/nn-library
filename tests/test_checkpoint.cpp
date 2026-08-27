@@ -53,7 +53,7 @@ void train_steps(nn::Module& model, nn::optim::Optimizer& opt,
   for (int i = 0; i < steps; ++i) {
     opt.zero_grad();
     nn::autograd::GradScope grad;
-    nn::Tensor loss = nn::cross_entropy(model(x), labels);
+    nn::Tensor loss = nn::cross_entropy(model.forward(x), labels);
     loss.backward();
     opt.step();
   }

@@ -15,7 +15,7 @@ float accuracy(nn::Module& model, nn::data::DataLoader<>& loader) {
   while (loader.has_next()) {
     auto [xb, yb] = loader.next();
     correct += nn::metrics::count_correct(
-                model(xb).to(nn::Device::CPU),
+                model.forward(xb).to(nn::Device::CPU),
                 yb.to(nn::Device::CPU));
     total   += yb.extent(0);
   }
@@ -62,7 +62,7 @@ int main(int argc, char** argv) {
       opt.zero_grad();
 
       nn::autograd::GradScope grad;
-      nn::Tensor loss = nn::cross_entropy(model(xb), yb);
+      nn::Tensor loss = nn::cross_entropy(model.forward(xb), yb);
       loss.backward();
       opt.step();
 
