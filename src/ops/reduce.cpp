@@ -4,6 +4,7 @@
 
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 #include <kernels/kernel_api.h>
 
@@ -112,6 +113,76 @@ void topk_rows(const Tensor& x, int k, Tensor& values, Tensor& indices) {
   const auto& kk = nn::kernels::kernels(x.device());
   kk.topk_rows(current_stream(x.device()), x.device_ptr(), x.shape().dim(0), N, k,
                values.device_ptr(), indices.device_ptr_i32(), row_stride_of(x, "topk_rows"));
+}
+
+Tensor multinomial(const Tensor& weights, Pcg32& rng) {
+  if (weights.shape().rank() != 2) {
+    throw std::invalid_argument("multinomial: weights must be 2D");
+  }
+
+  const int M = weights.shape().dim(0);
+  const int N = weights.shape().dim(1);
+  const Tensor host = weights.pack().to(Device::CPU);
+  const float* w = host.host_data();
+
+  const size_t rows = M, cols = N;
+  std::vector<int32_t> sampled(rows);
+
+  for (size_t i = 0; i < rows; ++i) {
+    const float* row = w + i * cols;
+    float total = 0.0f;
+    for (size_t j = 0; j < cols; ++j) total += row[j];
+    if (!(total > 0.0f)) {
+      throw std::invalid_argument("multinomial: row " + std::to_string(i) +
+                                  " has no positive weight");
+    }
+
+    const float target = rng.next_uniform() * total;
+    float cum = 0.0f;
+    size_t chosen = cols - 1;   // the last slot a rounding error could leave uncovered
+    for (size_t j = 0; j < cols; ++j) {
+      cum += row[j];
+      if (target < cum) { chosen = j; break; }
+    }
+    sampled[i] = int32_t(chosen);
+  }
+
+  return Tensor::from_i32(sampled, Shape{M}, weights.device());
+}
+
+Tensor gather_rows(const Tensor& src, const Tensor& idx) {
+  if (src.shape().rank() != 2) throw std::invalid_argument("gather_rows: src must be 2D");
+  const int M = src.shape().dim(0);
+  const int N = src.shape().dim(1);
+  if (idx.shape().rank() != 1 || idx.shape().dim(0) != M) {
+    throw std::invalid_argument("gather_rows: idx must be 1D with one entry per row of src");
+  }
+  same_device(src, idx, "gather_rows");
+
+  const Tensor host_src = src.pack().to(Device::CPU);
+  const Tensor host_idx = idx.pack().to(Device::CPU);
+  const int32_t* hi = host_idx.host_data_i32();
+
+  const size_t rows = M, cols = N;
+  for (size_t i = 0; i < rows; ++i) {
+    if (hi[i] < 0 || size_t(hi[i]) >= cols) {
+      throw std::invalid_argument("gather_rows: idx[" + std::to_string(i) + "] = " +
+                                  std::to_string(hi[i]) + " is out of range for a row of " +
+                                  std::to_string(N));
+    }
+  }
+
+  if (src.dtype() == DType::I32) {
+    const int32_t* hs = host_src.host_data_i32();
+    std::vector<int32_t> out(rows);
+    for (size_t i = 0; i < rows; ++i) out[i] = hs[i * cols + size_t(hi[i])];
+    return Tensor::from_i32(out, Shape{M}, src.device());
+  }
+
+  const float* hs = host_src.host_data();
+  std::vector<float> out(rows);
+  for (size_t i = 0; i < rows; ++i) out[i] = hs[i * cols + size_t(hi[i])];
+  return Tensor::from(out, Shape{M}, src.device());
 }
 
 }  // namespace nn::ops

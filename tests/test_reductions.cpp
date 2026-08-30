@@ -574,3 +574,83 @@ NN_TEST(test_topk) {
     }
   }
 }
+
+// multinomial takes any nonnegative row, not just a normalised distribution --
+// topk_rows' raw values feed it directly, no softmax renormalisation needed.
+NN_TEST(multinomial_never_draws_a_zero_weight_column) {
+  const int M = 3, N = 5;
+
+  NN_TEST_FOR_EACH_DEVICE(dev) {
+    std::vector<float> host(size_t(M) * N, 0.0f);
+    for (int i = 0; i < M; ++i) {
+      host[size_t(i) * N + i % N] = 1.0f;
+      host[size_t(i) * N + (i + 2) % N] = 3.0f;   // unnormalised: doesn't sum to 1
+    }
+    const nn::Tensor weights = nn::Tensor::from(host, nn::Shape({M, N}), dev);
+
+    nn::Pcg32 rng(71);
+    for (int trial = 0; trial < 50; ++trial) {
+      const std::vector<int32_t> got = host_of_i32(nn::ops::multinomial(weights, rng));
+      NN_CHECK(int(got.size()) == M);
+      for (int i = 0; i < M; ++i) {
+        const int j = got[size_t(i)];
+        NN_CHECK(j == i % N || j == (i + 2) % N);
+      }
+    }
+  }
+}
+
+NN_TEST(multinomial_rejects_bad_input) {
+  NN_TEST_FOR_EACH_DEVICE(dev) {
+    nn::Pcg32 rng(72);
+    const nn::Tensor rank1 = nn::Tensor::from({1.0f, 2.0f, 3.0f}, dev);
+    NN_CHECK_THROWS(nn::ops::multinomial(rank1, rng), std::invalid_argument);
+
+    const nn::Tensor all_zero = nn::Tensor::from({{0.0f, 0.0f, 0.0f}}, dev);
+    NN_CHECK_THROWS(nn::ops::multinomial(all_zero, rng), std::invalid_argument);
+  }
+}
+
+// The motivating case: turning multinomial's pick (an index into topk_rows'
+// [M, K] values) back into topk_rows' matching [M, K] indices -- the actual
+// vocab id sampled.
+NN_TEST(gather_rows_maps_a_local_pick_back_through_topk_indices) {
+  const int M = 4, N = 6, K = 3;
+
+  NN_TEST_FOR_EACH_DEVICE(dev) {
+    nn::Pcg32 rng(81);
+    const nn::Tensor logits = nn::Tensor::randn({M, N}, rng, 1.0f, dev);
+    const nn::Tensor probs = nn::ops::softmax_rows(logits);   // multinomial needs nonnegative weights
+
+    nn::Tensor values, indices;
+    nn::ops::topk_rows(probs, K, values, indices);
+
+    const nn::Tensor local = nn::ops::multinomial(values, rng);   // [M], in [0, K)
+    const nn::Tensor vocab_id = nn::ops::gather_rows(indices, local);
+    NN_CHECK(vocab_id.shape() == nn::Shape({M}));
+    NN_CHECK(vocab_id.dtype() == nn::DType::I32);
+
+    const std::vector<int32_t> hl = host_of_i32(local);
+    const std::vector<int32_t> hidx = host_of_i32(indices);
+    const std::vector<int32_t> got = host_of_i32(vocab_id);
+    for (int i = 0; i < M; ++i) {
+      NN_CHECK(got[size_t(i)] == hidx[size_t(i) * K + size_t(hl[size_t(i)])]);
+    }
+  }
+}
+
+NN_TEST(gather_rows_gathers_float_rows_and_rejects_bad_input) {
+  NN_TEST_FOR_EACH_DEVICE(dev) {
+    const nn::Tensor src = nn::Tensor::from({{1.0f, 2.0f, 3.0f}, {4.0f, 5.0f, 6.0f}}, dev);
+    const nn::Tensor idx = nn::Tensor::from_i32({2, 0}, dev);
+
+    const std::vector<float> got = host_of(nn::ops::gather_rows(src, idx));
+    NN_CHECK_CLOSE(got[0], 3.0f, 0.0f);
+    NN_CHECK_CLOSE(got[1], 4.0f, 0.0f);
+
+    NN_CHECK_THROWS(nn::ops::gather_rows(src, nn::Tensor::from_i32({0, 1, 2}, dev)),
+                    std::invalid_argument);
+    NN_CHECK_THROWS(nn::ops::gather_rows(src, nn::Tensor::from_i32({0, 5}, dev)),
+                    std::invalid_argument);
+  }
+}

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <nn/core/rng.h>
 #include <nn/core/tensor.h>
 #include <nn/ops/op_enums.h>
 
@@ -57,6 +58,23 @@ Tensor softmax_ce_backward(const Tensor& probs, const Tensor& labels, const Tens
 
 Tensor argmax_rows(const Tensor& x);
 void   topk_rows(const Tensor& x, int k, Tensor& values, Tensor& indices);
+
+// Draws one index per row of `weights` ([M, N]), weighted by row. Rows need
+// not sum to 1 -- any nonnegative row works -- so softmax output and
+// topk_rows' raw values both apply directly, with no renormalising step at
+// the call site. The one op here with no kernel behind it: Pcg32 is a
+// host-only generator, and by the time a row of weights exists it is already
+// tiny next to the forward pass that produced it, so drawing on the host
+// costs nothing worth a device kernel.
+Tensor multinomial(const Tensor& weights, Pcg32& rng);
+
+// out[i] = src[i, idx[i]] for each row i. src is [M, N], F32 or I32 -- the
+// dtype passes through unchanged -- and idx is I32 [M] with values in
+// [0, N). What turns multinomial's or argmax_rows' pick, an index into
+// topk_rows' [M, K] values, back into topk_rows' matching [M, K] indices,
+// i.e. the vocab id actually being sampled. Runs on the host, same as
+// multinomial and for the same reason.
+Tensor gather_rows(const Tensor& src, const Tensor& idx);
 
 void adam(const Tensor& p, const Tensor& g, Tensor& m, Tensor& v,
           float lr, float beta1, float beta2, float eps, float weight_decay, int step);
