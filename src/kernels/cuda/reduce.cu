@@ -1,6 +1,7 @@
 #include "cuda_kernels.h"
 
 #include <kernels/kernel_api.h>   // kSumAllWorkspace
+#include <kernels/random.h>
 
 #include "../../cuda_common.h"
 #include "../strided_index.h"
@@ -79,6 +80,78 @@ void cuda_topk_rows(const Stream& s, const float* X, int M, int N, int k,
   const size_t shared_bytes = size_t(k) * sizeof(int);
 
   topk_rows_kernel<<<grid, block, shared_bytes, stream>>>(X, M, N, k, values, indices, sx);
+  NN_CUDA_CHECK_LAUNCH(stream);
+}
+
+namespace {
+
+// idx is range-checked by ops::gather_rows before this ever runs, so the
+// kernel itself just reads -- one thread per row, no block cooperation needed.
+template <class T>
+__global__ void gather_rows_kernel(const T* __restrict__ src, const int32_t* __restrict__ idx,
+                                   T* __restrict__ out, int64_t M, int64_t sx) {
+  for (int64_t i = blockIdx.x * int64_t(blockDim.x) + threadIdx.x; i < M;
+       i += int64_t(gridDim.x) * blockDim.x) {
+    out[i] = src[i * sx + idx[i]];
+  }
+}
+
+template <class T>
+void launch_gather_rows(const Stream& s, const T* src, const int32_t* idx, T* out,
+                        int64_t M, int64_t sx) {
+  if (M == 0) return;
+  auto stream = static_cast<cudaStream_t>(s.handle);
+  constexpr int block = 256;
+  constexpr int kMaxGrid = 4096;
+  const int grid = int(std::min<int64_t>((M + block - 1) / block, kMaxGrid));
+  gather_rows_kernel<T><<<grid, block, 0, stream>>>(src, idx, out, M, sx);
+  NN_CUDA_CHECK_LAUNCH(stream);
+}
+
+}  // namespace
+
+void cuda_gather_rows(const Stream& s, const float* src, const int32_t* idx,
+                      float* out, int M, int64_t sx) {
+  launch_gather_rows(s, src, idx, out, int64_t(M), sx);
+}
+
+void cuda_gather_rows_i32(const Stream& s, const int32_t* src, const int32_t* idx,
+                          int32_t* out, int M, int64_t sx) {
+  launch_gather_rows(s, src, idx, out, int64_t(M), sx);
+}
+
+// total <= 0 (a caller passing an all-zero row) has no host-side check to
+// fall back on here, unlike naive_multinomial -- a device kernel cannot
+// throw, so it clamps to the last column instead of reading garbage.
+__global__ void multinomial_kernel(const float* __restrict__ W, int32_t* __restrict__ out,
+                                   int M, int N, int64_t sx, uint64_t seed, uint64_t offset) {
+  for (int64_t row = blockIdx.x * int64_t(blockDim.x) + threadIdx.x; row < M;
+       row += int64_t(gridDim.x) * blockDim.x) {
+    const float* r = W + row * sx;
+    float total = 0.0f;
+    for (int j = 0; j < N; ++j) total += r[j];
+
+    const float target = random_uniform(seed, offset + uint64_t(row)) *
+                          (total > 0.0f ? total : 1.0f);
+    float cum = 0.0f;
+    int chosen = N - 1;
+    for (int j = 0; j < N; ++j) {
+      cum += r[j];
+      if (target < cum) { chosen = j; break; }
+    }
+    out[row] = chosen;
+  }
+}
+
+void cuda_multinomial(const Stream& s, const float* W, int32_t* out, int M, int N, int64_t sx,
+                      uint64_t seed, uint64_t offset) {
+  if (M == 0 || N == 0) return;
+
+  auto stream = static_cast<cudaStream_t>(s.handle);
+  constexpr int block = 256;
+  constexpr int kMaxGrid = 4096;
+  const int grid = int(std::min<int64_t>((int64_t(M) + block - 1) / block, kMaxGrid));
+  multinomial_kernel<<<grid, block, 0, stream>>>(W, out, M, N, sx, seed, offset);
   NN_CUDA_CHECK_LAUNCH(stream);
 }
 

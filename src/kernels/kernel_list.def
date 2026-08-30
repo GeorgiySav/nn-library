@@ -33,6 +33,9 @@ NN_KERNEL(argmax_rows,           ArgmaxRowsFn)
 NN_KERNEL(sum_to,                SumToFn)
 NN_KERNEL(sum_all,               SumAllFn)
 NN_KERNEL(topk_rows,             TopkRowsFn)
+NN_KERNEL(gather_rows,           GatherRowsFn)
+NN_KERNEL(gather_rows_i32,       GatherRowsI32Fn)
+NN_KERNEL(multinomial,           MultinomialFn)
 
 // whole-buffer writes that are not elementwise maps
 NN_KERNEL(axpy,                  AxpyFn)

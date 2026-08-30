@@ -588,9 +588,9 @@ NN_TEST(multinomial_never_draws_a_zero_weight_column) {
     }
     const nn::Tensor weights = nn::Tensor::from(host, nn::Shape({M, N}), dev);
 
-    nn::Pcg32 rng(71);
+    nn::manual_seed(71);
     for (int trial = 0; trial < 50; ++trial) {
-      const std::vector<int32_t> got = host_of_i32(nn::ops::multinomial(weights, rng));
+      const std::vector<int32_t> got = host_of_i32(nn::ops::multinomial(weights));
       NN_CHECK(int(got.size()) == M);
       for (int i = 0; i < M; ++i) {
         const int j = got[size_t(i)];
@@ -602,12 +602,16 @@ NN_TEST(multinomial_never_draws_a_zero_weight_column) {
 
 NN_TEST(multinomial_rejects_bad_input) {
   NN_TEST_FOR_EACH_DEVICE(dev) {
-    nn::Pcg32 rng(72);
     const nn::Tensor rank1 = nn::Tensor::from({1.0f, 2.0f, 3.0f}, dev);
-    NN_CHECK_THROWS(nn::ops::multinomial(rank1, rng), std::invalid_argument);
+    NN_CHECK_THROWS(nn::ops::multinomial(rank1), std::invalid_argument);
 
-    const nn::Tensor all_zero = nn::Tensor::from({{0.0f, 0.0f, 0.0f}}, dev);
-    NN_CHECK_THROWS(nn::ops::multinomial(all_zero, rng), std::invalid_argument);
+    // CPU validates an all-zero row and throws; CUDA can't throw from a
+    // kernel, so it falls back to the last column instead -- see
+    // cuda_multinomial's comment. Only check the throw on CPU.
+    if (dev == nn::Device::CPU) {
+      const nn::Tensor all_zero = nn::Tensor::from({{0.0f, 0.0f, 0.0f}}, dev);
+      NN_CHECK_THROWS(nn::ops::multinomial(all_zero), std::invalid_argument);
+    }
   }
 }
 
@@ -625,7 +629,8 @@ NN_TEST(gather_rows_maps_a_local_pick_back_through_topk_indices) {
     nn::Tensor values, indices;
     nn::ops::topk_rows(probs, K, values, indices);
 
-    const nn::Tensor local = nn::ops::multinomial(values, rng);   // [M], in [0, K)
+    nn::manual_seed(82);
+    const nn::Tensor local = nn::ops::multinomial(values);   // [M], in [0, K)
     const nn::Tensor vocab_id = nn::ops::gather_rows(indices, local);
     NN_CHECK(vocab_id.shape() == nn::Shape({M}));
     NN_CHECK(vocab_id.dtype() == nn::DType::I32);

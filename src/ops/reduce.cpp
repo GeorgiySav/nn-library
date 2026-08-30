@@ -4,7 +4,8 @@
 
 #include <stdexcept>
 #include <string>
-#include <vector>
+
+#include <nn/core/rng.h>
 
 #include <kernels/kernel_api.h>
 
@@ -115,39 +116,21 @@ void topk_rows(const Tensor& x, int k, Tensor& values, Tensor& indices) {
                values.device_ptr(), indices.device_ptr_i32(), row_stride_of(x, "topk_rows"));
 }
 
-Tensor multinomial(const Tensor& weights, Pcg32& rng) {
+Tensor multinomial(const Tensor& weights) {
   if (weights.shape().rank() != 2) {
     throw std::invalid_argument("multinomial: weights must be 2D");
   }
 
   const int M = weights.shape().dim(0);
   const int N = weights.shape().dim(1);
-  const Tensor host = weights.pack().to(Device::CPU);
-  const float* w = host.host_data();
+  const uint64_t seed = random_seed();
+  const uint64_t offset = reserve_random(M);
 
-  const size_t rows = M, cols = N;
-  std::vector<int32_t> sampled(rows);
-
-  for (size_t i = 0; i < rows; ++i) {
-    const float* row = w + i * cols;
-    float total = 0.0f;
-    for (size_t j = 0; j < cols; ++j) total += row[j];
-    if (!(total > 0.0f)) {
-      throw std::invalid_argument("multinomial: row " + std::to_string(i) +
-                                  " has no positive weight");
-    }
-
-    const float target = rng.next_uniform() * total;
-    float cum = 0.0f;
-    size_t chosen = cols - 1;   // the last slot a rounding error could leave uncovered
-    for (size_t j = 0; j < cols; ++j) {
-      cum += row[j];
-      if (target < cum) { chosen = j; break; }
-    }
-    sampled[i] = int32_t(chosen);
-  }
-
-  return Tensor::from_i32(sampled, Shape{M}, weights.device());
+  Tensor out(Shape{M}, weights.device(), DType::I32);
+  const auto& k = nn::kernels::kernels(weights.device());
+  k.multinomial(current_stream(weights.device()), weights.device_ptr(), out.device_ptr_i32(),
+                M, N, row_stride_of(weights, "multinomial"), seed, offset);
+  return out;
 }
 
 Tensor gather_rows(const Tensor& src, const Tensor& idx) {
@@ -158,31 +141,35 @@ Tensor gather_rows(const Tensor& src, const Tensor& idx) {
     throw std::invalid_argument("gather_rows: idx must be 1D with one entry per row of src");
   }
   same_device(src, idx, "gather_rows");
+  require_contiguous(idx, "gather_rows");
 
-  const Tensor host_src = src.pack().to(Device::CPU);
-  const Tensor host_idx = idx.pack().to(Device::CPU);
-  const int32_t* hi = host_idx.host_data_i32();
-
-  const size_t rows = M, cols = N;
-  for (size_t i = 0; i < rows; ++i) {
-    if (hi[i] < 0 || size_t(hi[i]) >= cols) {
-      throw std::invalid_argument("gather_rows: idx[" + std::to_string(i) + "] = " +
-                                  std::to_string(hi[i]) + " is out of range for a row of " +
-                                  std::to_string(N));
+  // idx is tiny ([M]) next to src ([M, N]): validate its range against a
+  // host copy of just idx, so the actual gather over src stays on-device.
+  {
+    const Tensor host_idx = idx.to(Device::CPU);
+    const int32_t* hi = host_idx.host_data_i32();
+    for (int i = 0; i < M; ++i) {
+      if (hi[i] < 0 || hi[i] >= N) {
+        throw std::invalid_argument("gather_rows: idx[" + std::to_string(i) + "] = " +
+                                    std::to_string(hi[i]) + " is out of range for a row of " +
+                                    std::to_string(N));
+      }
     }
   }
 
+  const auto& k = nn::kernels::kernels(src.device());
+  const Stream& s = current_stream(src.device());
+  const int64_t sx = row_stride_of(src, "gather_rows");
+
   if (src.dtype() == DType::I32) {
-    const int32_t* hs = host_src.host_data_i32();
-    std::vector<int32_t> out(rows);
-    for (size_t i = 0; i < rows; ++i) out[i] = hs[i * cols + size_t(hi[i])];
-    return Tensor::from_i32(out, Shape{M}, src.device());
+    Tensor out(Shape{M}, src.device(), DType::I32);
+    k.gather_rows_i32(s, src.device_ptr_i32(), idx.device_ptr_i32(), out.device_ptr_i32(), M, sx);
+    return out;
   }
 
-  const float* hs = host_src.host_data();
-  std::vector<float> out(rows);
-  for (size_t i = 0; i < rows; ++i) out[i] = hs[i * cols + size_t(hi[i])];
-  return Tensor::from(out, Shape{M}, src.device());
+  Tensor out(Shape{M}, src.device(), DType::F32);
+  k.gather_rows(s, src.device_ptr(), idx.device_ptr_i32(), out.device_ptr(), M, sx);
+  return out;
 }
 
 }  // namespace nn::ops

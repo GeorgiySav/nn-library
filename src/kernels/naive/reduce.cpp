@@ -1,10 +1,13 @@
 #include "naive_kernels.h"
 
 #include <algorithm>
+#include <stdexcept>
+#include <string>
 #include <utility>
 #include <vector>
 
 #include <nn/core/device.h>
+#include <kernels/random.h>
 
 #include "../strided_index.h"
 
@@ -50,6 +53,49 @@ void naive_topk_rows(const Stream&, const float* X, int M, int N, int k,
       values[i * k + j] = pairs[j].first;
       indices[i * k + j] = pairs[j].second;
     }
+  }
+}
+
+namespace {
+
+template <class T>
+void gather_rows_impl(const T* src, const int32_t* idx, T* out, int M, int64_t sx) {
+  for (int i = 0; i < M; ++i) out[i] = src[int64_t(i) * sx + idx[i]];
+}
+
+}  // namespace
+
+// idx is range-checked by ops::gather_rows before this ever runs, so the
+// kernel itself just reads.
+void naive_gather_rows(const Stream&, const float* src, const int32_t* idx,
+                       float* out, int M, int64_t sx) {
+  gather_rows_impl(src, idx, out, M, sx);
+}
+
+void naive_gather_rows_i32(const Stream&, const int32_t* src, const int32_t* idx,
+                           int32_t* out, int M, int64_t sx) {
+  gather_rows_impl(src, idx, out, M, sx);
+}
+
+void naive_multinomial(const Stream&, const float* W, int32_t* out, int M, int N, int64_t sx,
+                       uint64_t seed, uint64_t offset) {
+  for (int i = 0; i < M; ++i) {
+    const float* row = W + int64_t(i) * sx;
+    float total = 0.0f;
+    for (int j = 0; j < N; ++j) total += row[j];
+    if (!(total > 0.0f)) {
+      throw std::invalid_argument("multinomial: row " + std::to_string(i) +
+                                  " has no positive weight");
+    }
+
+    const float target = random_uniform(seed, offset + uint64_t(i)) * total;
+    float cum = 0.0f;
+    int chosen = N - 1;   // the slot a rounding error could leave uncovered
+    for (int j = 0; j < N; ++j) {
+      cum += row[j];
+      if (target < cum) { chosen = j; break; }
+    }
+    out[i] = chosen;
   }
 }
 

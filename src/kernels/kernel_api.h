@@ -53,6 +53,16 @@ using ArgmaxRowsFn        = void(const Stream& s, const float* X, int32_t* out,
                                     int M, int N, int64_t sx);
 using TopkRowsFn          = void(const Stream& s, const float* X, int M, int N, int k,
                                     float* values, int32_t* indices, int64_t sx);
+// out[i] = src[i, idx[i]]. idx is validated by the caller, so the kernel
+// trusts it -- same division of labour as every other ops:: shape check.
+using GatherRowsFn        = void(const Stream& s, const float* src, const int32_t* idx,
+                                    float* out, int M, int64_t sx);
+using GatherRowsI32Fn     = void(const Stream& s, const int32_t* src, const int32_t* idx,
+                                    int32_t* out, int M, int64_t sx);
+// One categorical draw per row of W, keyed by (seed, offset + row) the same
+// way dropout keys its mask -- see kernels/random.h.
+using MultinomialFn       = void(const Stream& s, const float* W, int32_t* out,
+                                    int M, int N, int64_t sx, uint64_t seed, uint64_t offset);
 
 // The elementwise family. One slot per arity rather than per op: the op code
 // selects the arithmetic inside the kernel, from elementwise_ops.h.
