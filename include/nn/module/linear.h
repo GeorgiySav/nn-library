@@ -22,7 +22,7 @@ public:
 
   Tensor forward(const Tensor& x) override {
     // b_ is [out_features]; broadcasting stretches it across the batch.
-    return x.mm(w_) + b_;
+    return x.mm(w_, transposed_weight_) + b_;
   }
 
   void collect_named(const std::string& prefix, std::vector<NamedTensor>& out) override {
@@ -30,8 +30,14 @@ public:
     out.push_back({prefix + "b", &b_});
   }
 
+  Tensor& weight() { return w_; }
+  Tensor& bias()   { return b_; }
+
+  void set_transposed_weight(bool transposed = true) { transposed_weight_ = transposed; }
+
 private:
   Tensor w_, b_;
+  bool transposed_weight_ = false;
 };
 
 }  // namespace nn

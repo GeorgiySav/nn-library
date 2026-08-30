@@ -123,7 +123,7 @@ public:
   Tensor slice(int axis, int64_t start, int64_t len) const;
 
   Tensor pow(float e) const;                 // the scalar form, spelled better
-  Tensor mm(const Tensor& other) const;      // 2-D matrix product
+  Tensor mm(const Tensor& other, bool transB = false, bool transA = false) const;
   Tensor t() const;                          // swap the last two axes
   Tensor softmax() const;                    // over the last axis
 

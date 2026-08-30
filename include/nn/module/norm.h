@@ -29,6 +29,9 @@ public:
     out.push_back({prefix + "b", &b_});
   }
 
+  Tensor& weight() { return w_; }
+  Tensor& bias()   { return b_; }
+
 private:
   Tensor w_, b_;
   float eps_;
@@ -48,6 +51,8 @@ public:
   void collect_named(const std::string& prefix, std::vector<NamedTensor>& out) override {
     out.push_back({prefix + "w", &w_});
   }
+
+  Tensor& weight() { return w_; }
 
 private:
   Tensor w_;

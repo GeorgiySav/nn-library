@@ -27,6 +27,8 @@ public:
     out.push_back({prefix + "w", &w_});
   }
 
+  Tensor& weight() { return w_; }
+
 private:
   Tensor w_;
 };

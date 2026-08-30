@@ -44,7 +44,9 @@ Tensor Tensor::slice(int axis, int64_t start, int64_t len) const {
 }
 
 Tensor Tensor::pow(float e) const { return pow_scalar(e); }
-Tensor Tensor::mm(const Tensor& other) const { return autograd::matmul(*this, other); }
+Tensor Tensor::mm(const Tensor& other, bool transB, bool transA) const {
+  return autograd::matmul(*this, other, transA, transB);
+}
 Tensor Tensor::t() const { return autograd::transpose(*this, -2, -1); }
 Tensor Tensor::softmax() const { return autograd::softmax(*this); }
 

@@ -2,6 +2,7 @@
 
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <nn/core/state.h>
@@ -34,8 +35,24 @@ public:
   }
 
   // The flat view, for an optimiser or a clip that does not care about names.
+  // Deduplicated by AutogradMeta identity: two Tensor fields tied together
+  // (e.g. an LM head sharing an Embedding's weight -- see Linear::weight())
+  // alias the same storage and the same AutogradMeta, so they must count as
+  // one parameter here. Left un-deduplicated, an optimiser would allocate two
+  // separate moment buffers and apply two separate updates to the one
+  // storage they share, and a gradient clip would count its norm twice.
   void collect_parameters(std::vector<Tensor*>& out) {
-    for (NamedTensor& p : named_parameters()) out.push_back(p.t);
+    for (NamedTensor& p : named_parameters()) {
+      AutogradMeta* m = p.t->meta();
+      if (m) {
+        bool tied = false;
+        for (Tensor* existing : out) {
+          if (existing->meta() == m) { tied = true; break; }
+        }
+        if (tied) continue;
+      }
+      out.push_back(p.t);
+    }
   }
 
   void zero_grad() { for (Tensor* p : parameters()) p->zero_grad(); }
@@ -45,11 +62,34 @@ public:
   void eval()  { set_training(false); }
   bool training() const { return training_; }
 
+  // Moves every parameter slot to d. This walks the full named list rather
+  // than the deduplicated parameters(): a tied pair is still two distinct
+  // Tensor fields even though they alias one storage, and Tensor::to() across
+  // devices allocates a fresh Storage rather than moving the shared one in
+  // place -- so every slot needs its own reassignment, or an unvisited alias
+  // would keep pointing at the old device. The tie survives the move by
+  // reusing the same moved Tensor for every slot that shares its original
+  // AutogradMeta, instead of moving each one independently.
   void to(Device d) {
-    for (Tensor* p : parameters()) {
-      const bool rg = p->requires_grad();
-      *p = p->to(d);
-      p->set_requires_grad(rg);
+    std::vector<std::pair<AutogradMeta*, Tensor>> moved;
+    for (NamedTensor& p : named_parameters()) {
+      AutogradMeta* key = p.t->meta();
+      Tensor* reuse = nullptr;
+      if (key) {
+        for (auto& entry : moved) {
+          if (entry.first == key) { reuse = &entry.second; break; }
+        }
+      }
+      if (reuse) {
+        *p.t = *reuse;
+        continue;
+      }
+
+      const bool rg = p.t->requires_grad();
+      Tensor out = p.t->to(d);
+      out.set_requires_grad(rg);
+      if (key) moved.emplace_back(key, out);
+      *p.t = out;
     }
   }
 

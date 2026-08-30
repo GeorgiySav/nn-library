@@ -304,6 +304,85 @@ NN_TEST(gradcheck_batched_matmul) {
   }
 }
 
+// autograd::matmul's transA/transB read x/w as if transposed -- the answer
+// has to match doing the transpose by hand and multiplying normally.
+NN_TEST(transposed_matmul_matches_a_materialized_transpose) {
+  const int M = 4, K = 5, N = 3;
+
+  NN_TEST_FOR_EACH_DEVICE(dev) {
+    const nn::Tensor x_plain = spread(nn::Shape({M, K}), dev, 21);
+    const nn::Tensor x_t     = spread(nn::Shape({K, M}), dev, 23);   // [K, M]
+    const nn::Tensor w_plain = spread(nn::Shape({K, N}), dev, 24);
+    const nn::Tensor w_t     = spread(nn::Shape({N, K}), dev, 22);   // [N, K]
+
+    const nn::Tensor got_b = nn::autograd::matmul(x_plain, w_t, false, true);
+    NN_CHECK(got_b.shape() == nn::Shape({M, N}));
+    const nn::Tensor want_b = nn::autograd::matmul(x_plain, w_t.t().contiguous());
+    const std::vector<float> a_b = host_of(got_b), b_b = host_of(want_b);
+    for (size_t i = 0; i < a_b.size(); ++i) NN_CHECK_CLOSE(a_b[i], b_b[i], 1e-5f);
+
+    // Tensor::mm exposes the same flag, still as its single transB bool.
+    const std::vector<float> c_b = host_of(x_plain.mm(w_t, true));
+    for (size_t i = 0; i < a_b.size(); ++i) NN_CHECK_CLOSE(a_b[i], c_b[i], 1e-6f);
+
+    const nn::Tensor got_a = nn::autograd::matmul(x_t, w_plain, true, false);
+    NN_CHECK(got_a.shape() == nn::Shape({M, N}));
+    const nn::Tensor want_a = nn::autograd::matmul(x_t.t().contiguous(), w_plain);
+    const std::vector<float> a_a = host_of(got_a), b_a = host_of(want_a);
+    for (size_t i = 0; i < a_a.size(); ++i) NN_CHECK_CLOSE(a_a[i], b_a[i], 1e-5f);
+
+    // Tensor::mm's transA is its third argument, after transB -- confirm the
+    // order didn't get flipped between the two.
+    const std::vector<float> c_a = host_of(x_t.mm(w_plain, /*transB=*/false, /*transA=*/true));
+    for (size_t i = 0; i < a_a.size(); ++i) NN_CHECK_CLOSE(a_a[i], c_a[i], 1e-6f);
+
+    const nn::Tensor got_ab = nn::autograd::matmul(x_t, w_t, true, true);
+    const nn::Tensor want_ab =
+        nn::autograd::matmul(x_t.t().contiguous(), w_t.t().contiguous());
+    const std::vector<float> a_ab = host_of(got_ab), b_ab = host_of(want_ab);
+    for (size_t i = 0; i < a_ab.size(); ++i) NN_CHECK_CLOSE(a_ab[i], b_ab[i], 1e-5f);
+
+    const std::vector<float> c_ab = host_of(x_t.mm(w_t, /*transB=*/true, /*transA=*/true));
+    for (size_t i = 0; i < a_ab.size(); ++i) NN_CHECK_CLOSE(a_ab[i], c_ab[i], 1e-6f);
+  }
+}
+
+// (false, false) is gradcheck_batched_matmul's fold-path case; this covers
+// the other three transA/transB combinations, plain rank 2 and the fold path.
+NN_TEST(gradcheck_transposed_matmul) {
+  NN_TEST_FOR_EACH_DEVICE(dev) {
+    nn::Pcg32 rng(31);
+
+    for (bool transA : {false, true}) {
+      for (bool transB : {false, true}) {
+        if (!transA && !transB) continue;
+
+        {   // plain rank 2, both operands
+          nn::Tensor x = transA ? nn::Tensor::randn({5, 4}, rng, 0.6f, dev)    // [K, M]
+                                : nn::Tensor::randn({4, 5}, rng, 0.6f, dev);   // [M, K]
+          nn::Tensor w = transB ? nn::Tensor::randn({3, 5}, rng, 0.6f, dev)    // [N, K]
+                                : nn::Tensor::randn({5, 3}, rng, 0.6f, dev);   // [K, N]
+          x.set_requires_grad(true);
+          w.set_requires_grad(true);
+          auto f = [&] { return nn::autograd::matmul(x, w, transA, transB); };
+          NN_CHECK(grad_error(x, f) < 2e-2f);
+          NN_CHECK(grad_error(w, f) < 2e-2f);
+        }
+        if (!transA) {   // the fold path only applies when x isn't transposed
+          nn::Tensor x = nn::Tensor::randn({2, 5, 4}, rng, 0.6f, dev);
+          nn::Tensor w = transB ? nn::Tensor::randn({3, 4}, rng, 0.6f, dev)    // [N, K]
+                                : nn::Tensor::randn({4, 3}, rng, 0.6f, dev);   // [K, N]
+          x.set_requires_grad(true);
+          w.set_requires_grad(true);
+          auto f = [&] { return nn::autograd::matmul(x, w, transA, transB); };
+          NN_CHECK(grad_error(x, f) < 2e-2f);
+          NN_CHECK(grad_error(w, f) < 2e-2f);   // the hand-folded weight gradient
+        }
+      }
+    }
+  }
+}
+
 NN_TEST(gradcheck_attention) {
   const int B = 2, T = 4, H = 2, hd = 3, C = H * hd;
 

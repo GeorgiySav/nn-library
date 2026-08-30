@@ -140,19 +140,19 @@ target_link_libraries(test_all PRIVATE nn)
 # the op traits, the RNG), and that layer is deliberately not on the public
 # include path. Anything reaching src/ from here is testing an implementation
 # detail on purpose.
-target_include_directories(test_all PRIVATE tests ${CMAKE_SOURCE_DIR}/src)
+target_include_directories(test_all PRIVATE tests ${CMAKE_CURRENT_SOURCE_DIR}/src)
 add_test(NAME unit COMMAND test_all)
 
 if(NN_BUILD_EXAMPLES)
   file(GLOB EXAMPLE_DIRS CONFIGURE_DEPENDS
-       RELATIVE ${CMAKE_SOURCE_DIR}/examples ${CMAKE_SOURCE_DIR}/examples/*)
+       RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}/examples ${CMAKE_CURRENT_SOURCE_DIR}/examples/*)
   foreach(name ${EXAMPLE_DIRS})
-    if(IS_DIRECTORY ${CMAKE_SOURCE_DIR}/examples/${name})
+    if(IS_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/examples/${name})
       file(GLOB srcs CONFIGURE_DEPENDS examples/${name}/*.cpp)
       add_executable(example_${name} ${srcs})
       target_link_libraries(example_${name} PRIVATE nn)
       target_compile_definitions(example_${name} PRIVATE
-        NN_PROJECT_ROOT="${CMAKE_SOURCE_DIR}")
+        NN_PROJECT_ROOT="${CMAKE_CURRENT_SOURCE_DIR}")
     endif()
   endforeach()
 endif()
@@ -165,6 +165,6 @@ if(NN_BUILD_BENCH)
     target_link_libraries(${name} PRIVATE nn)
     # src for the same reason the tests get it: bench_bandwidth measures the
     # kernel table directly.
-    target_include_directories(${name} PRIVATE bench ${CMAKE_SOURCE_DIR}/src)
+    target_include_directories(${name} PRIVATE bench ${CMAKE_CURRENT_SOURCE_DIR}/src)
   endforeach()
 endif()

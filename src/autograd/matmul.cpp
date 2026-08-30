@@ -18,24 +18,26 @@ Tensor as_matrix(const Tensor& t) {
 
 }  // namespace
 
-Tensor matmul(const Tensor& x, const Tensor& w) {
-  Tensor out = ops::matmul(x, w);
+Tensor matmul(const Tensor& x, const Tensor& w, bool transA, bool transB) {
+  Tensor out = ops::matmul(x, w, transA, transB);
 
   record_op(out, "matmul",
-    [x, w](const Tensor& g, std::span<Tensor> g_in) {
-      // g @ W^T. When W has no batch axes this folds to a single GEMM on its
-      // own, the same way the forward did.
-      g_in[0] = ops::sum_to(ops::matmul(g, w, false, true), x.shape());
+    [x, w, transA, transB](const Tensor& g, std::span<Tensor> g_in) {
+      g_in[0] = transA
+          ? ops::sum_to(ops::matmul(w, g, transB, true), x.shape())
+          : ops::sum_to(ops::matmul(g, w, false, !transB), x.shape());
 
-      // X^T @ g. The transpose blocks the fold rule inside ops::matmul, so a
-      // batched X would give one small GEMM per batch element and then a
-      // reduction. Folding both operands by hand turns that back into the
-      // single [K, B*T] x [B*T, N] GEMM it should be -- this is the weight
-      // gradient of every Linear in the model, so it is worth the special case.
-      if (w.shape().rank() == 2 && x.shape().rank() > 2) {
-        g_in[1] = ops::matmul(as_matrix(x), as_matrix(g), true, false);
+      if (w.shape().rank() == 2 && x.shape().rank() > 2 && !transA) {
+        g_in[1] = transB ? ops::matmul(as_matrix(g), as_matrix(x), true, false)
+                         : ops::matmul(as_matrix(x), as_matrix(g), true, false);
+      } else if (!transA) {
+        g_in[1] = transB
+            ? ops::sum_to(ops::matmul(g, x, true, false), w.shape())
+            : ops::sum_to(ops::matmul(x, g, true, false), w.shape());
       } else {
-        g_in[1] = ops::sum_to(ops::matmul(x, g, true, false), w.shape());
+        g_in[1] = transB
+            ? ops::sum_to(ops::matmul(g, x, true, true), w.shape())
+            : ops::sum_to(ops::matmul(x, g, false, false), w.shape());
       }
     }, x, w);
 

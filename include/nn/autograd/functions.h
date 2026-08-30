@@ -21,7 +21,9 @@ Tensor scalar(ops::ScalarOp op, const Tensor& x, float k);
 #include <nn/ops/scalar_ops.def>
 #undef NN_SCALAR
 
-Tensor matmul(const Tensor& x, const Tensor& w); // [M, K] @ [K, N] -> [M, N]
+// [M, K] @ [K, N] -> [M, N]. transA reads x as [K, M] instead, transB reads w
+// as [N, K] instead
+Tensor matmul(const Tensor& x, const Tensor& w, bool transA = false, bool transB = false);
 Tensor cross_entropy(const Tensor& logits, const Tensor& labels); // rank 0
 
 Tensor contiguous(const Tensor& x);   // differentiable pack; identity backward
