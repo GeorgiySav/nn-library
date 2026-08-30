@@ -58,6 +58,21 @@ Tensor cat(std::initializer_list<Tensor> parts, int dim);
 
 Tensor masked_fill(const Tensor& x, const Tensor& mask, float value);
 
+// softmax(q @ k^T / sqrt(dk) [+ mask]) @ v, over the last two axes of q, k, v
+// (everything left of those is batch, e.g. [B, H, T, dk]). q and k must share
+// their last dim (dk); k and v must share their second-to-last dim (Tk).
+//
+// mask is optional (pass an undefined Tensor for none) and uses the "keep"
+// convention already established by tril_mask/masked_fill in this codebase:
+// 1 = attend, 0 = masked out. It broadcasts against the [.., Tq, Tk] score
+// matrix the same way any other elementwise operand does, so a padding mask
+// shaped [B, 1, 1, Tk] or a precomputed [Tq, Tk] mask both work. is_causal
+// ANDs in tril_mask(Tq) and requires Tq == Tk; dropout_p applies to the
+// post-softmax attention weights and is a no-op unless training is true.
+Tensor scaled_dot_product_attention(const Tensor& q, const Tensor& k, const Tensor& v,
+                                    const Tensor& mask, float dropout_p=0.0f, bool is_causal=false,
+                                    bool training=false);
+
 }
 
 namespace nn {
@@ -79,5 +94,6 @@ using autograd::masked_fill;
 using autograd::softmax;
 using autograd::embedding;
 using autograd::matmul;
+using autograd::scaled_dot_product_attention;
 
 }

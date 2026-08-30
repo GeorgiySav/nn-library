@@ -1,5 +1,8 @@
 #include <nn/autograd/functions.h>
 
+#include <cmath>
+#include <stdexcept>
+
 #include <nn/core/rng.h>
 #include <nn/ops/ops.h>
 
@@ -105,6 +108,51 @@ Tensor masked_fill(const Tensor& x, const Tensor& mask, float value) {
   const Tensor keep = ops::scalar(ops::ScalarOp::RsubScalar, mask, 1.0f);
   const Tensor fill = ops::scalar(ops::ScalarOp::MulScalar, mask, value);
   return binary(ops::BinaryOp::Add, binary(ops::BinaryOp::Mul, x, keep), fill);
+}
+
+// Composed the same way as masked_fill above: softmax(q @ k^T / sqrt(dk) [+
+// mask]) @ v, entirely out of matmul/scalar/softmax/dropout/masked_fill, so
+// it records nothing of its own on the tape.
+Tensor scaled_dot_product_attention(const Tensor& q, const Tensor& k, const Tensor& v,
+                                    const Tensor& mask, float dropout_p, bool is_causal,
+                                    bool training) {
+  const int r = q.shape().rank();
+  if (r < 2 || k.shape().rank() != r || v.shape().rank() != r) {
+    throw std::invalid_argument(
+        "scaled_dot_product_attention: q, k, v must all have the same rank (>= 2)");
+  }
+  const int dk = q.shape().dim(r - 1);
+  if (k.shape().dim(r - 1) != dk) {
+    throw std::invalid_argument(
+        "scaled_dot_product_attention: q and k must have the same head dimension");
+  }
+  const int Tq = q.shape().dim(r - 2);
+  const int Tk = k.shape().dim(r - 2);
+  if (v.shape().dim(r - 2) != Tk) {
+    throw std::invalid_argument(
+        "scaled_dot_product_attention: k and v must have the same sequence length");
+  }
+  if (is_causal && Tq != Tk) {
+    throw std::invalid_argument(
+        "scaled_dot_product_attention: is_causal requires equal query and key length");
+  }
+
+  Tensor scores = mul_scalar(matmul(q, k, false, true), 1.0f / std::sqrt(float(dk)));
+
+  if (is_causal || mask.defined()) {
+    // Built with plain ops:: calls -- like masked_fill's own keep/fill --
+    // since neither the causal mask nor a caller-supplied mask ever needs a
+    // gradient, so combining them shouldn't cost a tape node.
+    Tensor keep = is_causal ? tril_mask(Tq, q.device()) : Tensor();
+    if (mask.defined()) {
+      keep = keep.defined() ? ops::binary(ops::BinaryOp::Mul, mask, keep) : mask;
+    }
+    const Tensor block = ops::scalar(ops::ScalarOp::RsubScalar, keep, 1.0f);
+    scores = masked_fill(scores, block, -1e9f);
+  }
+
+  const Tensor probs = dropout(softmax(scores), dropout_p, training);
+  return matmul(probs, v);
 }
 
 }  // namespace nn::autograd

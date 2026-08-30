@@ -1,5 +1,7 @@
 #include <nn/module/attention.h>
 
+#include <nn/autograd/functions.h>
+
 namespace nn {
 
 MultiHeadAttention::MultiHeadAttention(int embed_dim,
@@ -44,9 +46,7 @@ Tensor MultiHeadAttention::split_heads(const Tensor& x) {
 }
 
 Tensor MultiHeadAttention::scaled_dot_product_attention(const Tensor& Q, const Tensor& K, const Tensor& V) {
-  Tensor scaled = (Q.mm(K.transpose(-2, -1).contiguous()) / sqrtf(dk_)).softmax();
-  Tensor attended = scaled.mm(V);
-  return attended;
+  return nn::scaled_dot_product_attention(Q, K, V, Tensor());
 }
 
 Tensor MultiHeadAttention::combine_heads(const Tensor& x) {
