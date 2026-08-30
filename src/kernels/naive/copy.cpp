@@ -25,11 +25,25 @@ void naive_pack_i32(const Stream&, const int32_t* src, TensorView v,
   pack_impl(src, v, dst, n);
 }
 
-void naive_unpack(const Stream&, const float* src,
-                             float* dst, TensorView v, int64_t n) {
+namespace {
+
+template<class T>
+void unpack_impl(const T* src, T* dst, TensorView v, int64_t n) {
   for (int64_t i = 0; i < n; ++i) {
     dst[offset_of(v, i)] = src[i];
   }
+}
+
+}
+
+void naive_unpack(const Stream&, const float* src,
+                             float* dst, TensorView v, int64_t n) {
+  unpack_impl(src, dst, v, n);
+}
+
+void naive_unpack_i32(const Stream&, const int32_t* src,
+                               int32_t* dst, TensorView v, int64_t n) {
+  unpack_impl(src, dst, v, n);
 }
 
 }

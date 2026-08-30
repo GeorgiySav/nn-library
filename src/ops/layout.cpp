@@ -51,15 +51,21 @@ void unpack(Tensor& dst, const Tensor& src) {
   if (dst.dtype() != src.dtype()) {
     throw std::invalid_argument("unpack: dst and src must have the same dtype");
   }
-  if (dst.dtype() != DType::F32) {
-    throw std::invalid_argument("unpack: only F32 is supported");
-  }
 
   const Tensor packed = src.pack();
 
   const auto& k = nn::kernels::kernels(dst.device());
-  k.unpack(current_stream(dst.device()), packed.device_ptr(),
-           dst.device_ptr(), view_of(dst), dst.numel());
+  const Stream& s = current_stream(dst.device());
+  const TensorView v = view_of(dst);
+
+  switch (dst.dtype()) {
+    case DType::F32:
+      k.unpack(s, packed.device_ptr(), dst.device_ptr(), v, dst.numel());
+      break;
+    case DType::I32:
+      k.unpack_i32(s, packed.device_ptr_i32(), dst.device_ptr_i32(), v, dst.numel());
+      break;
+  }
 }
 
 }  // namespace nn::ops

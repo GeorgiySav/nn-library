@@ -112,6 +112,8 @@ using PackI32Fn            = void(const Stream& s, const int32_t* src, TensorVie
                                      int32_t* dst, int64_t n);
 using UnpackFn             = void(const Stream& s, const float* src,
                                      float* dst, TensorView vdst, int64_t n);
+using UnpackI32Fn          = void(const Stream& s, const int32_t* src,
+                                     int32_t* dst, TensorView vdst, int64_t n);
 
 using SumToFn              = void(const Stream& s, const float* g,
                                      TensorView keep, TensorView red,

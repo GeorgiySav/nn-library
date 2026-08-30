@@ -45,8 +45,9 @@ void cuda_pack_i32(const Stream& s, const int32_t* src, TensorView v,
 
 namespace {
 
-__global__ void unpack_kernel(const float* __restrict__ src,
-                                         float* __restrict__ dst,
+template<class T>
+__global__ void unpack_kernel(const T* __restrict__ src,
+                                         T* __restrict__ dst,
                                          TensorView v, int64_t n) {
   for (int64_t i = blockIdx.x * int64_t(blockDim.x) + threadIdx.x;
        i < n;
@@ -55,15 +56,25 @@ __global__ void unpack_kernel(const float* __restrict__ src,
   }
 }
 
+template<class T>
+void launch_unpack(const Stream& s, const T* src, T* dst, TensorView v, int64_t n) {
+  if (n == 0) return;
+  auto stream = static_cast<cudaStream_t>(s.handle);
+  const int grid = int(std::min<int64_t>((n + kBlock - 1) / kBlock, kMaxGrid));
+  unpack_kernel<T><<<grid, kBlock, 0, stream>>>(src, dst, v, n);
+  NN_CUDA_CHECK_LAUNCH(stream);
+}
+
 }  // namespace
 
 void cuda_unpack(const Stream& s, const float* src,
                             float* dst, TensorView v, int64_t n) {
-  if (n == 0) return;
-  auto stream = static_cast<cudaStream_t>(s.handle);
-  const int grid = int(std::min<int64_t>((n + kBlock - 1) / kBlock, kMaxGrid));
-  unpack_kernel<<<grid, kBlock, 0, stream>>>(src, dst, v, n);
-  NN_CUDA_CHECK_LAUNCH(stream);
+  launch_unpack(s, src, dst, v, n);
+}
+
+void cuda_unpack_i32(const Stream& s, const int32_t* src,
+                              int32_t* dst, TensorView v, int64_t n) {
+  launch_unpack(s, src, dst, v, n);
 }
 
 }
