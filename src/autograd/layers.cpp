@@ -21,6 +21,20 @@ Tensor cross_entropy(const Tensor& logits, const Tensor& labels) {
   return loss;
 }
 
+Tensor cross_entropy(const Tensor& logits, const Tensor& labels, const Tensor& weights) {
+  Tensor loss = Tensor::scalar(0.0f, logits.device(), logits.dtype());
+  Tensor probs(logits.shape(), logits.device(), logits.dtype());
+  ops::softmax_ce_weighted(logits, labels, weights, loss, probs);
+
+  record_op(loss, "cross_entropy_weighted",
+    [probs, labels, weights](const Tensor& g, std::span<Tensor> g_in) {
+      g_in[0] = ops::softmax_ce_weighted_backward(probs, labels, weights, g);
+    },
+  logits);
+
+  return loss;
+}
+
 Tensor softmax(const Tensor& x) {
   Tensor out = ops::softmax_rows(x);
 

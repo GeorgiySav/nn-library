@@ -55,6 +55,15 @@ void   softmax_ce(const Tensor& logits, const Tensor& labels, Tensor& loss_out, 
 
 Tensor softmax_ce_backward(const Tensor& probs, const Tensor& labels, const Tensor& g_loss);
 
+// Same as softmax_ce / softmax_ce_backward, but each row's contribution is
+// scaled by weights[i]: loss = (1/M) * sum_i weights[i] * nll(logits[i], labels[i]).
+// weights is a plain [M] float tensor -- it never needs a gradient, same role
+// as labels.
+void   softmax_ce_weighted(const Tensor& logits, const Tensor& labels, const Tensor& weights,
+                           Tensor& loss_out, Tensor& probs);
+Tensor softmax_ce_weighted_backward(const Tensor& probs, const Tensor& labels,
+                                    const Tensor& weights, const Tensor& g_loss);
+
 Tensor argmax_rows(const Tensor& x);
 void   topk_rows(const Tensor& x, int k, Tensor& values, Tensor& indices);
 

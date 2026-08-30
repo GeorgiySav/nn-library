@@ -41,7 +41,7 @@ struct CpuAllocator : public Allocator {
       return nullptr;
     }
     bytes = (bytes + 63) & ~size_t(63); // align to 64 bytes
-    return new(std::align_val_t(64)) char[bytes];
+    return ::operator new(bytes, std::align_val_t(64));
   }
 
   void free(void* ptr) override {

@@ -46,6 +46,15 @@ using SoftmaxCeFn         = void(const Stream& s, const float* logits, const int
                                     float* loss_out, float* probs, int M, int N, int64_t sz);
 using SoftmaxCeBackwardFn = void(const Stream& s, const float* probs, const int32_t* labels,
                                     const float* g_loss, float* g_logits, int M, int N, int64_t sp);
+// Same as SoftmaxCeFn / SoftmaxCeBackwardFn, but each row's contribution is
+// scaled by weights[row] (a plain [M] float array -- never itself a gradient
+// target, same role as labels).
+using SoftmaxCeWeightedFn         = void(const Stream& s, const float* logits, const int32_t* labels,
+                                    const float* weights, float* loss_out, float* probs,
+                                    int M, int N, int64_t sz);
+using SoftmaxCeWeightedBackwardFn = void(const Stream& s, const float* probs, const int32_t* labels,
+                                    const float* weights, const float* g_loss, float* g_logits,
+                                    int M, int N, int64_t sp);
 using AdamStepFn          = void(const Stream& s, float* p, const float* g, float* m, float* v,
                                     float lr, float b1, float b2, float eps, float wd,
                                     float bc1, float bc2, int64_t n);

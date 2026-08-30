@@ -50,6 +50,8 @@ NN_KERNEL(softmax_rows,          SoftmaxRowsFn)
 NN_KERNEL(softmax_rows_backward, SoftmaxRowsBackwardFn)
 NN_KERNEL(softmax_ce,            SoftmaxCeFn)
 NN_KERNEL(softmax_ce_backward,   SoftmaxCeBackwardFn)
+NN_KERNEL(softmax_ce_weighted,          SoftmaxCeWeightedFn)
+NN_KERNEL(softmax_ce_weighted_backward, SoftmaxCeWeightedBackwardFn)
 
 // embedding
 NN_KERNEL(embedding,             EmbeddingFn)

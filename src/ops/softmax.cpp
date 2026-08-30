@@ -110,4 +110,70 @@ Tensor softmax_ce_backward(const Tensor& probs, const Tensor& labels, const Tens
   return g_logits;
 }
 
+void softmax_ce_weighted(const Tensor& logits, const Tensor& labels, const Tensor& weights,
+                         Tensor& loss_out, Tensor& probs) {
+  same_device(logits, labels, "softmax_ce_weighted");
+  same_device(labels, weights, "softmax_ce_weighted");
+  same_device(labels, loss_out, "softmax_ce_weighted");
+  same_device(probs, loss_out, "softmax_ce_weighted");
+
+  if (logits.shape().rank() != 2 || labels.shape().rank() != 1) {
+    throw std::invalid_argument("logits must be 2D and labels must be 1D");
+  }
+  if (logits.shape().dim(0) != labels.shape().dim(0)) {
+    throw std::invalid_argument("Number of samples in logits and labels must match");
+  }
+  if (weights.shape().rank() != 1) {
+    throw std::invalid_argument("weights must be 1D");
+  }
+  if (weights.shape().dim(0) != logits.shape().dim(0)) {
+    throw std::invalid_argument("Number of samples in logits and weights must match");
+  }
+  if (loss_out.shape().rank() != 0) {
+    throw std::invalid_argument("loss_out must be a scalar tensor");
+  }
+  if (probs.shape() != logits.shape()) {
+    throw std::invalid_argument("probs must have the same shape as logits");
+  }
+
+  require_contiguous(probs, "softmax_ce_weighted (probs)");
+
+  const auto& k = nn::kernels::kernels(logits.device());
+  k.softmax_ce_weighted(current_stream(logits.device()), logits.device_ptr(), labels.device_ptr_i32(),
+                        weights.device_ptr(), loss_out.device_ptr(), probs.device_ptr(),
+                        logits.shape().dim(0), logits.shape().dim(1),
+                        row_stride_of(logits, "softmax_ce_weighted"));
+}
+
+Tensor softmax_ce_weighted_backward(const Tensor& probs, const Tensor& labels,
+                                    const Tensor& weights, const Tensor& g_loss) {
+  same_device(probs, labels, "softmax_ce_weighted_backward");
+  same_device(labels, weights, "softmax_ce_weighted_backward");
+  same_device(g_loss, labels, "softmax_ce_weighted_backward");
+
+  if (probs.shape().rank() != 2 || labels.shape().rank() != 1) {
+    throw std::invalid_argument("probs must be 2D and labels must be 1D");
+  }
+  if (probs.shape().dim(0) != labels.shape().dim(0)) {
+    throw std::invalid_argument("Number of samples in probs and lebls must match");
+  }
+  if (weights.shape().rank() != 1) {
+    throw std::invalid_argument("weights must be 1D");
+  }
+  if (weights.shape().dim(0) != probs.shape().dim(0)) {
+    throw std::invalid_argument("Number of samples in probs and weights must match");
+  }
+  if (g_loss.shape().rank() != 0) {
+    throw std::invalid_argument("g_loss must be a scalar tensor");
+  }
+
+  Tensor g_logits(probs.shape(), probs.device(), probs.dtype());
+  const auto& k = nn::kernels::kernels(g_logits.device());
+  k.softmax_ce_weighted_backward(current_stream(probs.device()), probs.device_ptr(), labels.device_ptr_i32(),
+                                 weights.device_ptr(), g_loss.device_ptr(), g_logits.device_ptr(),
+                                 probs.shape().dim(0), probs.shape().dim(1),
+                                 row_stride_of(probs, "softmax_ce_weighted_backward"));
+  return g_logits;
+}
+
 }  // namespace nn::ops

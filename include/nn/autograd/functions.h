@@ -25,6 +25,9 @@ Tensor scalar(ops::ScalarOp op, const Tensor& x, float k);
 // as [N, K] instead
 Tensor matmul(const Tensor& x, const Tensor& w, bool transA = false, bool transB = false);
 Tensor cross_entropy(const Tensor& logits, const Tensor& labels); // rank 0
+// Per-row-weighted: loss = (1/M) * sum_i weights[i] * nll(logits[i], labels[i]).
+// weights is a plain [M] float tensor and never itself needs a gradient.
+Tensor cross_entropy(const Tensor& logits, const Tensor& labels, const Tensor& weights);
 
 Tensor contiguous(const Tensor& x);   // differentiable pack; identity backward
 Tensor  permute(const Tensor& x, std::span<const int> order);

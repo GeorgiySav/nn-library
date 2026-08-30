@@ -83,4 +83,74 @@ void naive_softmax_ce_backward(const Stream&, const float* probs, const int32_t*
   }
 }
 
+void naive_softmax_ce_weighted(const Stream&, const float* logits, const int32_t* labels,
+                               const float* weights, float* loss_out, float* probs,
+                               int M, int N, int64_t sz) {
+  /*
+  Same as naive_softmax_ce, except each row's contribution to the loss is
+  scaled by weights[i]:
+  loss = (1/M) * sum_i weights[i] * -((z[label]-max) - log(sum))
+  */
+
+  assert(M >= 0 && N > 0);
+  float total_loss = 0.0f;
+
+  for (int i{0}; i < M; ++i) {
+    const float* z = logits + static_cast<int64_t>(i) * sz;
+    float* p = probs + static_cast<int64_t>(i) * N;
+
+    const int32_t label = labels[i];
+    assert(label >= 0 && label < N);
+
+    float m = z[0];
+    for (int j{1}; j < N; ++j) {
+      if (z[j] > m) {
+        m = z[j];
+      }
+    }
+
+    float s = 0.0f;
+    for (int j{0}; j < N; ++j) {
+      float exp_z = std::exp(z[j] - m);
+      p[j] = exp_z;
+      s += exp_z;
+    }
+
+    const float inv_s = 1.0f / s;
+    for (int j{0}; j < N; ++j) {
+      p[j] *= inv_s;
+    }
+
+    total_loss -= weights[i] * ((z[label] - m) - std::log(s));
+  }
+
+  *loss_out = (M > 0) ? total_loss / static_cast<float>(M) : 0.0f;
+}
+
+void naive_softmax_ce_weighted_backward(const Stream&, const float* probs, const int32_t* labels,
+                                        const float* weights, const float* g_loss, float* g_logits,
+                                        int M, int N, int64_t sp) {
+  /*
+  Same as naive_softmax_ce_backward, except each row gets its own scale:
+  scale_i = weights[i] * g_loss / M
+  */
+  assert(M >= 0 && N > 0);
+
+  const float base = (M > 0) ? *g_loss / static_cast<float>(M) : 0.0f;
+
+  for (int i{0}; i < M; ++i) {
+    const float* p = probs + static_cast<int64_t>(i) * sp;
+    float* g = g_logits + static_cast<int64_t>(i) * N;
+
+    const int32_t label = labels[i];
+    assert(label >= 0 && label < N);
+
+    const float scale = weights[i] * base;
+    for (int j{0}; j < N; ++j) {
+      g[j] = scale * p[j];
+    }
+    g[label] -= scale;
+  }
+}
+
 }
