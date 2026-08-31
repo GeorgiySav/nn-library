@@ -86,7 +86,10 @@ void check_against_loop(const nn::Tensor& a, const nn::Tensor& b,
     const std::vector<float> w = host_of(want);
     for (int64_t j = 0; j < per; ++j) {
       const float got_v = flat[size_t(i * per + j)], want_v = w[size_t(j)];
-      if (std::fabs(got_v - want_v) > 1e-4f * std::fmax(1.0f, std::fabs(want_v))) {
+      // 2e-3 relative: cuBLAS runs FP32 GEMMs through TF32 tensor cores
+      // (~10-bit mantissa), so the batched and per-matrix-looped dispatch
+      // paths round slightly differently even though both are correct.
+      if (std::fabs(got_v - want_v) > 2e-3f * std::fmax(1.0f, std::fabs(want_v))) {
         nn::test::report(__FILE__, __LINE__, std::string(what) + ": matrix " +
             std::to_string(i) + " element " + std::to_string(j) + ": " +
             std::to_string(got_v) + " vs " + std::to_string(want_v));
@@ -308,6 +311,10 @@ NN_TEST(gradcheck_batched_matmul) {
 // has to match doing the transpose by hand and multiplying normally.
 NN_TEST(transposed_matmul_matches_a_materialized_transpose) {
   const int M = 4, K = 5, N = 3;
+  // cuBLAS runs FP32 GEMMs through TF32 tensor cores (~10-bit mantissa), so
+  // the transposed-flag and materialized-transpose paths below round
+  // slightly differently even though both are correct.
+  constexpr float kTf32Tol = 2e-3f;
 
   NN_TEST_FOR_EACH_DEVICE(dev) {
     const nn::Tensor x_plain = spread(nn::Shape({M, K}), dev, 21);
@@ -319,31 +326,31 @@ NN_TEST(transposed_matmul_matches_a_materialized_transpose) {
     NN_CHECK(got_b.shape() == nn::Shape({M, N}));
     const nn::Tensor want_b = nn::autograd::matmul(x_plain, w_t.t().contiguous());
     const std::vector<float> a_b = host_of(got_b), b_b = host_of(want_b);
-    for (size_t i = 0; i < a_b.size(); ++i) NN_CHECK_CLOSE(a_b[i], b_b[i], 1e-5f);
+    for (size_t i = 0; i < a_b.size(); ++i) NN_CHECK_CLOSE(a_b[i], b_b[i], kTf32Tol);
 
     // Tensor::mm exposes the same flag, still as its single transB bool.
     const std::vector<float> c_b = host_of(x_plain.mm(w_t, true));
-    for (size_t i = 0; i < a_b.size(); ++i) NN_CHECK_CLOSE(a_b[i], c_b[i], 1e-6f);
+    for (size_t i = 0; i < a_b.size(); ++i) NN_CHECK_CLOSE(a_b[i], c_b[i], kTf32Tol);
 
     const nn::Tensor got_a = nn::autograd::matmul(x_t, w_plain, true, false);
     NN_CHECK(got_a.shape() == nn::Shape({M, N}));
     const nn::Tensor want_a = nn::autograd::matmul(x_t.t().contiguous(), w_plain);
     const std::vector<float> a_a = host_of(got_a), b_a = host_of(want_a);
-    for (size_t i = 0; i < a_a.size(); ++i) NN_CHECK_CLOSE(a_a[i], b_a[i], 1e-5f);
+    for (size_t i = 0; i < a_a.size(); ++i) NN_CHECK_CLOSE(a_a[i], b_a[i], kTf32Tol);
 
     // Tensor::mm's transA is its third argument, after transB -- confirm the
     // order didn't get flipped between the two.
     const std::vector<float> c_a = host_of(x_t.mm(w_plain, /*transB=*/false, /*transA=*/true));
-    for (size_t i = 0; i < a_a.size(); ++i) NN_CHECK_CLOSE(a_a[i], c_a[i], 1e-6f);
+    for (size_t i = 0; i < a_a.size(); ++i) NN_CHECK_CLOSE(a_a[i], c_a[i], kTf32Tol);
 
     const nn::Tensor got_ab = nn::autograd::matmul(x_t, w_t, true, true);
     const nn::Tensor want_ab =
         nn::autograd::matmul(x_t.t().contiguous(), w_t.t().contiguous());
     const std::vector<float> a_ab = host_of(got_ab), b_ab = host_of(want_ab);
-    for (size_t i = 0; i < a_ab.size(); ++i) NN_CHECK_CLOSE(a_ab[i], b_ab[i], 1e-5f);
+    for (size_t i = 0; i < a_ab.size(); ++i) NN_CHECK_CLOSE(a_ab[i], b_ab[i], kTf32Tol);
 
     const std::vector<float> c_ab = host_of(x_t.mm(w_t, /*transB=*/true, /*transA=*/true));
-    for (size_t i = 0; i < a_ab.size(); ++i) NN_CHECK_CLOSE(a_ab[i], c_ab[i], 1e-6f);
+    for (size_t i = 0; i < a_ab.size(); ++i) NN_CHECK_CLOSE(a_ab[i], c_ab[i], kTf32Tol);
   }
 }
 

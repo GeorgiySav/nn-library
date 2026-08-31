@@ -162,6 +162,7 @@ cublasHandle_t handle() {
   static cublasHandle_t h = [] {
     cublasHandle_t tmp = nullptr;
     NN_CUBLAS_CHECK(cublasCreate(&tmp));
+    NN_CUBLAS_CHECK(cublasSetMathMode(tmp, CUBLAS_TF32_TENSOR_OP_MATH));
     return tmp;
   }();
   return h;

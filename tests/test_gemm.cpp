@@ -133,10 +133,14 @@ NN_TEST(test_gemm_trans_consistency) {
     const nn::Tensor h3 = c3.to(nn::Device::CPU);
     const nn::Tensor h4 = c4.to(nn::Device::CPU);
 
+    // cuBLAS runs FP32 GEMMs through TF32 tensor cores (~10-bit mantissa), so
+    // the four transA/transB dispatch variants round slightly differently
+    // even though all four are correct.
+    constexpr float kTf32Tol = 2e-3f;
     for (int i{0}; i < M*N; ++i) {
-      NN_CHECK_CLOSE(hb.host_data()[i], h2.host_data()[i], 1e-6);
-      NN_CHECK_CLOSE(hb.host_data()[i], h3.host_data()[i], 1e-6);
-      NN_CHECK_CLOSE(hb.host_data()[i], h4.host_data()[i], 1e-6);
+      NN_CHECK_CLOSE(hb.host_data()[i], h2.host_data()[i], kTf32Tol);
+      NN_CHECK_CLOSE(hb.host_data()[i], h3.host_data()[i], kTf32Tol);
+      NN_CHECK_CLOSE(hb.host_data()[i], h4.host_data()[i], kTf32Tol);
     }
   }
 }
