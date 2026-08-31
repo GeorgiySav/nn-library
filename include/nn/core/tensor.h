@@ -88,7 +88,10 @@ public:
   const std::shared_ptr<AutogradMeta>& ensure_meta_shared() const;
   AutogradMeta& ensure_meta() const { return *ensure_meta_shared(); };
   Tensor& grad();
-  void zero_grad();
+  // set_to_none frees the gradient (undefines it) instead of zeroing it in
+  // place -- see Optimizer::zero_grad in nn/optim/optim.h for why an
+  // optimizer needs this.
+  void zero_grad(bool set_to_none = false);
 
   // Seeds this scalar with a gradient of 1 and walks the tape that produced it
   // back to the leaves. The tape does not have to still be the active one, but

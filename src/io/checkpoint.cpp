@@ -6,6 +6,7 @@
 #include <fstream>
 #include <stdexcept>
 #include <unordered_map>
+#include <unordered_set>
 
 #include <nn/core/allocator.h>
 #include <nn/core/rng.h>
@@ -296,6 +297,16 @@ void save_checkpoint(const std::string& path, Module& model,
 
 int64_t load_checkpoint(const std::string& path, Module& model,
                         optim::Optimizer& opt) {
+  // Lets an optimiser with lazily-allocated state (AdamW's m/v moments)
+  // pre-allocate exactly the entries this file has, before collect_state()
+  // (inside run_state, below) hands out pointers for load() to fill --
+  // otherwise load() would be asked for a moment tensor the file
+  // legitimately never wrote (a block that hadn't been sampled yet when
+  // this checkpoint was saved).
+  std::unordered_set<std::string> available;
+  for (std::string& name : tensor_names(path)) available.insert(std::move(name));
+  opt.prepare_for_load("opt.", available);
+
   RunState s = run_state(model, opt);
   s.scalars.push_back({"step", 0.0});
   s.scalars.push_back({"rng.seed", 0.0});

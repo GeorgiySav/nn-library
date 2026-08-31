@@ -55,7 +55,9 @@ public:
     }
   }
 
-  void zero_grad() { for (Tensor* p : parameters()) p->zero_grad(); }
+  void zero_grad(bool set_to_none = false) {
+    for (Tensor* p : parameters()) p->zero_grad(set_to_none);
+  }
 
   virtual void set_training(bool on) { training_ = on; }
   void train() { set_training(true); }

@@ -306,10 +306,14 @@ Tensor& Tensor::grad() {
   return m.grad;
 }
 
-void Tensor::zero_grad() {
-  if (meta_ && meta_->grad.defined())
+void Tensor::zero_grad(bool set_to_none) {
+  if (!meta_ || !meta_->grad.defined()) return;
+  if (set_to_none) {
+    meta_->grad = Tensor{};
+  } else {
     memset_bytes(meta_->grad.raw(), meta_->grad.device(), 0,
                  meta_->grad.numel() * dtype_size(dtype_));
+  }
 }
 
 TensorView view_of(const Tensor& t) {

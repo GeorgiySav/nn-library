@@ -203,6 +203,76 @@ NN_TEST(an_undecayed_parameter_moves_exactly_as_adam_would) {
   }
 }
 
+// zero_grad(set_to_none=true) is what block-wise-style training relies on:
+// when only some parameters get a gradient on a given step, freeing every
+// OTHER parameter's gradient (rather than leaving it zeroed) is what lets
+// plain step()'s existing "skip if grad undefined" check work correctly --
+// it must move exactly like plain step() would for the parameter that is
+// touched, and leave every untouched parameter -- weights AND Adam's m/v
+// state -- completely alone, even across many calls (not just skip one
+// step's worth of decay).
+NN_TEST(zero_grad_set_to_none_frees_the_gradient_buffer) {
+  NN_TEST_FOR_EACH_DEVICE(dev) {
+    nn::Tensor p = with_grad({1.0f}, dev);
+    NN_CHECK(p.meta()->grad.defined()); // set_requires_grad already allocated it
+
+    p.zero_grad(/*set_to_none=*/true);
+    NN_CHECK(!p.meta()->grad.defined());
+
+    // the plain form still just clears it in place, as before
+    set_grad(p, {5.0f});
+    p.zero_grad(/*set_to_none=*/false);
+    NN_CHECK(p.meta()->grad.defined());
+    NN_CHECK_CLOSE(host_of(p.grad())[0], 0.0f, 0.0f);
+  }
+}
+
+NN_TEST(step_skips_a_parameter_whose_gradient_was_freed_by_zero_grad) {
+  const float lr = 0.05f, wd = 0.1f;
+
+  NN_TEST_FOR_EACH_DEVICE(dev) {
+    nn::Tensor a = with_grad({1.0f}, dev);
+    nn::Tensor b = with_grad({2.0f}, dev);
+    // rank 1, so the default predicate would skip it -- decay everything here
+    nn::optim::AdamW opt({&a, &b}, lr, wd, kB1, kB2, kEps,
+                         [](const nn::Tensor&) { return true; });
+
+    Reference ref_a{1.0};
+    for (int i = 0; i < 5; ++i) {
+      opt.zero_grad(/*set_to_none=*/true); // as run_training_loop does for block-wise models
+      set_grad(a, {0.3f});                 // b's gradient stays undefined this round
+      opt.step();
+      ref_a.step(0.3, lr, wd);
+
+      NN_CHECK_CLOSE(host_of(a)[0], float(ref_a.p), 2e-6f);
+      NN_CHECK_CLOSE(host_of(b)[0], 2.0f, 0.0f); // b never moved, ever
+    }
+  }
+}
+
+NN_TEST(adamw_lazily_allocates_moments_only_for_a_parameter_actually_stepped) {
+  NN_TEST_FOR_EACH_DEVICE(dev) {
+    nn::Tensor a = with_grad({1.0f}, dev);
+    nn::Tensor b = with_grad({2.0f}, dev);
+    nn::optim::AdamW opt({&a, &b}, 0.01f, 0.0f, kB1, kB2, kEps,
+                         [](const nn::Tensor&) { return true; });
+
+    opt.zero_grad(/*set_to_none=*/true);
+    set_grad(a, {0.3f}); // b is never touched
+    opt.step();
+
+    std::vector<nn::NamedTensor> tensors;
+    std::vector<nn::NamedScalar> scalars;
+    opt.collect_state("opt.", tensors, scalars);
+
+    // one m and one v -- a's -- not two: b's moments were never allocated
+    NN_CHECK(tensors.size() == 2);
+    bool saw_m0 = false;
+    for (const nn::NamedTensor& t : tensors) saw_m0 |= (t.name == "opt.m.0");
+    NN_CHECK(saw_m0);
+  }
+}
+
 NN_TEST(set_lr_changes_the_next_step_and_keeps_the_moments) {
   NN_TEST_FOR_EACH_DEVICE(dev) {
     nn::Tensor p = with_grad({1.0f}, dev);

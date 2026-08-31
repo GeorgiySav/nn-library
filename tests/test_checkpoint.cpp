@@ -39,6 +39,21 @@ struct TempFile {
   std::string str() const { return path.string(); }
 };
 
+// Two independent Linears under one Module, so a test can drive gradients
+// through only one of them and leave the other's optimiser state (and, with
+// zero_grad(set_to_none=true), its gradient too) permanently unallocated.
+struct TwoLinears : nn::Module {
+  nn::Linear touched, untouched;
+  TwoLinears(nn::Pcg32& rng, nn::Device d) : touched(4, 3, rng), untouched(4, 3, rng) {
+    touched.to(d);
+    untouched.to(d);
+  }
+  void collect_named(const std::string& prefix, std::vector<nn::NamedTensor>& out) override {
+    touched.collect_named(prefix + "touched.", out);
+    untouched.collect_named(prefix + "untouched.", out);
+  }
+};
+
 nn::Sequential make_model(nn::Device d, uint64_t seed = 4) {
   nn::Pcg32 rng(seed);
   nn::Sequential m(nn::Linear(6, 5, rng), nn::ReLu(),
@@ -247,6 +262,13 @@ NN_TEST(weights_only_reads_out_of_a_full_checkpoint) {
   nn::Sequential model = make_model(nn::Device::CPU, 31);
   nn::optim::AdamW opt(model.parameters(), 0.01f);
 
+  // AdamW's moments are allocated lazily on the first real step() (see
+  // optim.h) -- without at least one, there would be no "opt.m.*" entries
+  // to compare against a weights-only save at all.
+  const nn::Tensor x = nn::Tensor::full({2, 6}, 0.5f);
+  const nn::Tensor labels = nn::Tensor::from_i32({0, 2});
+  train_steps(model, opt, x, labels, 1);
+
   nn::io::save_checkpoint(full.str(), model, opt, 12);
   nn::io::save_weights(thin.str(), model);
 
@@ -274,6 +296,73 @@ NN_TEST(weights_only_reads_out_of_a_full_checkpoint) {
   nn::optim::AdamW fresh_opt(other.parameters(), 0.01f);
   NN_CHECK_THROWS(nn::io::load_checkpoint(thin.str(), other, fresh_opt),
                   std::runtime_error);
+}
+
+// AdamW's m/v moments are now allocated lazily (see optim.h) -- a parameter
+// never stepped has no moments to save at all. A checkpoint written while
+// some parameters sit untouched must omit their entries entirely (not write
+// zeros), and loading it back must not choke on those missing names, nor
+// force-allocate them: the resumed optimiser should still be exactly as
+// lazy as a fresh one would be for whatever remains untouched.
+NN_TEST(sparse_optimizer_state_round_trips_and_stays_lazy) {
+  TempFile file("nn_ck_sparse.bin");
+
+  NN_TEST_FOR_EACH_DEVICE(dev) {
+    nn::Pcg32 rng(5);
+    TwoLinears model(rng, dev);
+
+    nn::optim::AdamW opt(model.parameters(), 0.05f, 0.01f);
+    const nn::Tensor x = nn::Tensor::from({{0.4f, -0.7f, 1.1f, 0.2f}}, dev);
+    const nn::Tensor labels = nn::Tensor::from_i32({1}, dev);
+
+    for (int i = 0; i < 3; ++i) {
+      opt.zero_grad(/*set_to_none=*/true);
+      nn::autograd::GradScope grad;
+      nn::Tensor loss = nn::cross_entropy(model.touched.forward(x), labels); // untouched never enters the graph
+      loss.backward();
+      opt.step();
+    }
+
+    const std::vector<float> untouched_before = host_of(*model.untouched.parameters()[0]);
+
+    nn::io::save_checkpoint(file.str(), model, opt, 3);
+
+    // touched's weight is parameter index 0 (collected first), untouched's is
+    // index 2 -- its moments must be absent, not present as zeros.
+    const std::vector<std::string> names = nn::io::tensor_names(file.str());
+    NN_CHECK(std::find(names.begin(), names.end(), "opt.m.0") != names.end());
+    NN_CHECK(std::find(names.begin(), names.end(), "opt.m.2") == names.end());
+
+    // resuming into a fresh optimiser must not choke on the missing entries,
+    // and untouched's weights must come back exactly as they were
+    nn::Pcg32 rng2(999);
+    TwoLinears fresh(rng2, dev);
+    nn::optim::AdamW fresh_opt(fresh.parameters(), 0.05f, 0.01f);
+    const int64_t step = nn::io::load_checkpoint(file.str(), fresh, fresh_opt);
+    NN_CHECK(step == 3);
+
+    const std::vector<float> untouched_after = host_of(*fresh.untouched.parameters()[0]);
+    NN_CHECK(untouched_after.size() == untouched_before.size());
+    for (size_t i = 0; i < untouched_before.size(); ++i) {
+      NN_CHECK_CLOSE(untouched_after[i], untouched_before[i], 0.0f);
+    }
+
+    // and the resumed optimiser still lazily allocates untouched's moments
+    // only once it is actually touched for the first time, same as a fresh one
+    fresh_opt.zero_grad(/*set_to_none=*/true);
+    {
+      nn::autograd::GradScope grad;
+      nn::Tensor loss = nn::cross_entropy(fresh.untouched.forward(x), labels);
+      loss.backward();
+    }
+    fresh_opt.step();
+    std::vector<nn::NamedTensor> t2;
+    std::vector<nn::NamedScalar> s2;
+    fresh_opt.collect_state("opt.", t2, s2);
+    bool now_has_untouched = false;
+    for (const nn::NamedTensor& t : t2) now_has_untouched |= (t.name == "opt.m.2");
+    NN_CHECK(now_has_untouched);
+  }
 }
 
 // The reason names are worth the trouble: a shape mismatch says which tensor.

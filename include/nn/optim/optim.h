@@ -6,6 +6,7 @@
 #include <string>
 #include <span>
 #include <stdexcept>
+#include <unordered_set>
 #include <vector>
 
 #include <nn/core/state.h>
@@ -81,11 +82,40 @@ public:
   explicit Optimizer(float lr) : lr_(lr) {}
   virtual ~Optimizer() = default;
   virtual void step() = 0;
-  virtual void zero_grad() = 0;
+
+  // set_to_none frees each parameter's gradient (Tensor::zero_grad's own
+  // set_to_none) instead of zeroing it in place -- matching PyTorch's
+  // zero_grad(set_to_none=True) default. Block-wise training (see
+  // DiffusionBlockedGPT) needs this: only one block's parameters get a
+  // gradient on a given step, and step()'s "skip if grad undefined" check
+  // is the only thing that stops the optimiser from applying a spurious
+  // update (including decoupled weight decay) to every OTHER block. Without
+  // set_to_none, a parameter's gradient stays "defined" (just zeroed)
+  // forever after its first update, since plain zero_grad() only clears an
+  // existing buffer, it never frees it -- so step() could no longer tell
+  // "not part of this step" from "touched, gradient happens to be zero."
+  // Full-model training (GPT, DiffusionRecurrent) should keep the default
+  // false: every parameter is touched every step there, so freeing and
+  // reallocating its grad buffer each step would be pure churn for no
+  // benefit.
+  virtual void zero_grad(bool set_to_none = false) = 0;
 
   virtual void collect_state(const std::string& prefix,
                              std::vector<NamedTensor>& tensors,
                              std::vector<NamedScalar>& scalars) = 0;
+
+  // Called with the set of tensor names actually present in a checkpoint
+  // (already prefixed, e.g. "opt.m.3") before collect_state() is used to
+  // load it. An optimiser with lazily-allocated state (AdamW's m/v moments,
+  // see AdamW::collect_state) needs this to pre-allocate exactly the
+  // entries the file has, since collect_state() only hands out pointers for
+  // state it has already allocated, and load() requires every tensor it is
+  // asked for to already exist at the right shape. An optimiser with no
+  // lazy state (SGD) has nothing to do here.
+  virtual void prepare_for_load(const std::string& prefix,
+                                const std::unordered_set<std::string>& available) {
+    (void)prefix; (void)available;
+  }
 
   virtual void apply_state(const std::string& prefix,
                            std::span<const NamedScalar> scalars) = 0;
@@ -111,7 +141,9 @@ public:
     }
   }
 
-  void zero_grad() override { for (Tensor* p : params_) p->zero_grad(); }
+  void zero_grad(bool set_to_none = false) override {
+    for (Tensor* p : params_) p->zero_grad(set_to_none);
+  }
 
   // Plain SGD carries no state; the rate is the caller's or a schedule's.
   void collect_state(const std::string& prefix, std::vector<NamedTensor>&,
@@ -136,12 +168,19 @@ public:
         float beta1 = 0.9f, float beta2 = 0.999f, float eps = 1e-8f,
         const std::function<bool(const Tensor&)>& should_decay = decay_by_rank)
     : Optimizer(lr), params_(std::move(params)),
+      m_(params_.size()), v_(params_.size()),
       beta1_(beta1), beta2_(beta2), eps_(eps) {
     for (Tensor* p : params_) {
-      m_.emplace_back(Tensor::zeros(p->shape(), p->device(), p->dtype()));
-      v_.emplace_back(Tensor::zeros(p->shape(), p->device(), p->dtype()));
       wd_.push_back(should_decay(*p) ? weight_decay : 0.0f);
     }
+    // m_/v_ start undefined and are allocated lazily in step(), the first
+    // time a parameter actually has a gradient to update on -- mirrors
+    // PyTorch's AdamW, which only initializes exp_avg/exp_avg_sq for a
+    // parameter on its first step(). Block-wise training only ever touches
+    // one block per step (see zero_grad's set_to_none), so eagerly
+    // allocating every block's moments up front would permanently cost
+    // full-model optimiser-state memory even though most blocks sit
+    // untouched for the entire run.
   }
 
   void step() override {
@@ -153,21 +192,45 @@ public:
       AutogradMeta* m = p->meta();
       if (!m || !m->grad.defined()) continue;
 
+      if (!m_[i].defined()) {
+        m_[i] = Tensor::zeros(p->shape(), p->device(), p->dtype());
+        v_[i] = Tensor::zeros(p->shape(), p->device(), p->dtype());
+      }
+
       ops::adam(*p, m->grad, m_[i], v_[i],
                 lr_, beta1_, beta2_, eps_, wd_[i], step_);
     }
   }
 
-  void zero_grad() override { for (Tensor* p : params_) p->zero_grad(); }
+  void zero_grad(bool set_to_none = false) override {
+    for (Tensor* p : params_) p->zero_grad(set_to_none);
+  }
 
   void collect_state(const std::string& prefix, std::vector<NamedTensor>& tensors,
                      std::vector<NamedScalar>& scalars) override {
     for (size_t i = 0; i < params_.size(); ++i) {
+      // Skip moments never allocated -- this parameter has yet to be
+      // stepped even once (e.g. a block that hasn't been sampled yet).
+      // Absent from the checkpoint entirely rather than written as zeros,
+      // so a resumed run still knows to lazily (re)allocate it exactly as
+      // a fresh optimiser would -- see prepare_for_load.
+      if (!m_[i].defined()) continue;
       tensors.push_back({prefix + "m." + std::to_string(i), &m_[i]});
       tensors.push_back({prefix + "v." + std::to_string(i), &v_[i]});
     }
     scalars.push_back({prefix + "step", double(step_)});
     scalars.push_back({prefix + "lr", double(lr_)});
+  }
+
+  void prepare_for_load(const std::string& prefix,
+                        const std::unordered_set<std::string>& available) override {
+    for (size_t i = 0; i < params_.size(); ++i) {
+      if (m_[i].defined()) continue;
+      if (!available.count(prefix + "m." + std::to_string(i))) continue; // the file never touched this one either
+      Tensor* p = params_[i];
+      m_[i] = Tensor::zeros(p->shape(), p->device(), p->dtype());
+      v_[i] = Tensor::zeros(p->shape(), p->device(), p->dtype());
+    }
   }
 
   void apply_state(const std::string& prefix,
