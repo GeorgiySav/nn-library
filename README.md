@@ -2,8 +2,6 @@
 
 A small C++23 tensor and autograd library with CPU and CUDA backends, built from scratch.
 
-Tensors, reverse-mode autodiff, a handful of neural network modules, an optimizer, and a checkpoint format.
-
 ---
 
 ## Contents
@@ -20,7 +18,7 @@ Tensors, reverse-mode autodiff, a handful of neural network modules, an optimize
 ## Features
 
 - Strided tensor core with broadcasting, views, and both CPU and CUDA storage
-- Reverse-mode autograd with a recorded tape
+- Autograd with a recorded tape
 - Modules: `Linear`, `Embedding`, `LayerNorm`, `RMSNorm`, `Dropout`, `MultiHeadAttention`, `Sequential`, `ReLu`, `GeLu`
 - AdamW optimizer with lazy moment allocation
 - Checkpoint save and load
@@ -37,8 +35,6 @@ Tensors, reverse-mode autodiff, a handful of neural network modules, an optimize
 ## Backends
 
 The CUDA backend is optional and gated on `NN_WITH_CUDA`. By default it follows whether `nvcc` is found: present means the CUDA backend is built, absent means a CPU-only build against the CPU kernels. Pass `-DNN_WITH_CUDA=OFF` to force a CPU-only build on a machine that does have CUDA, which is a quick way to exercise the CPU kernels in isolation.
-
-In a CPU-only build, every `Device::CUDA` entry point throws and `cuda_device_count()` returns 0, so anything that picks a device automatically (`devices()` in the tests, the examples) falls back to CPU on its own.
 
 ## Building
 
