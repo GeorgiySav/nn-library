@@ -1,4 +1,4 @@
-#include "naive_kernels.h"
+#include "cpu_kernels.h"
 
 #include <cmath>
 
@@ -9,12 +9,12 @@
 
 namespace nn::kernels {
 
-void naive_unary(const Stream&, UnaryOp op, const float* X, TensorView vx,
+void cpu_unary(const Stream&, UnaryOp op, const float* X, TensorView vx,
                  float* Y, int64_t n) {
   for (int64_t i = 0; i < n; ++i) Y[i] = apply_unary(op, X[offset_of(vx, i)]);
 }
 
-void naive_unary_backward(const Stream&, UnaryOp op,
+void cpu_unary_backward(const Stream&, UnaryOp op,
                           const float* X, TensorView vx,
                           const float* Y, TensorView vy,
                           const float* G, TensorView vg,
@@ -31,7 +31,7 @@ void naive_unary_backward(const Stream&, UnaryOp op,
   }
 }
 
-void naive_binary(const Stream&, BinaryOp op,
+void cpu_binary(const Stream&, BinaryOp op,
                   const float* A, TensorView va,
                   const float* B, TensorView vb,
                   float* C, int64_t n) {
@@ -40,7 +40,7 @@ void naive_binary(const Stream&, BinaryOp op,
   }
 }
 
-void naive_binary_backward(const Stream&, BinaryOp op, int side,
+void cpu_binary_backward(const Stream&, BinaryOp op, int side,
                            const float* A, TensorView va,
                            const float* B, TensorView vb,
                            const float* C, TensorView vc,
@@ -52,12 +52,12 @@ void naive_binary_backward(const Stream&, BinaryOp op, int side,
   }
 }
 
-void naive_scalar(const Stream&, ScalarOp op, float k,
+void cpu_scalar(const Stream&, ScalarOp op, float k,
                   const float* X, TensorView vx, float* Y, int64_t n) {
   for (int64_t i = 0; i < n; ++i) Y[i] = apply_scalar(op, X[offset_of(vx, i)], k);
 }
 
-void naive_scalar_backward(const Stream&, ScalarOp op, float k,
+void cpu_scalar_backward(const Stream&, ScalarOp op, float k,
                            const float* X, TensorView vx,
                            const float* Y, TensorView vy,
                            const float* G, TensorView vg,
@@ -68,26 +68,26 @@ void naive_scalar_backward(const Stream&, ScalarOp op, float k,
   }
 }
 
-void naive_fill(const Stream&, float v, float* X, int64_t n) {
+void cpu_fill(const Stream&, float v, float* X, int64_t n) {
   for (int64_t i{0}; i < n; ++i) {
     X[i] = v;
   }
 }
 
-void naive_fill_from(const Stream&, const float* src, float* X, int64_t n) {
+void cpu_fill_from(const Stream&, const float* src, float* X, int64_t n) {
   const float v = *src;
   for (int64_t i{0}; i < n; ++i) {
     X[i] = v;
   }
 }
 
-void naive_axpy(const Stream&, float alpha, const float* X, float* Y, int64_t n) {
+void cpu_axpy(const Stream&, float alpha, const float* X, float* Y, int64_t n) {
   for (int64_t i{0}; i < n; ++i) {
     Y[i] += alpha * X[i];
   }
 }
 
-void naive_adam_step(const Stream&, float* p, const float* g, float* m, float* v,
+void cpu_adam_step(const Stream&, float* p, const float* g, float* m, float* v,
                       float lr, float b1, float b2, float eps, float wd,
                       float bc1, float bc2, int64_t n) {
   for (int64_t i{0}; i < n; ++i) {
@@ -98,7 +98,7 @@ void naive_adam_step(const Stream&, float* p, const float* g, float* m, float* v
   }
 }
 
-void naive_dropout(const Stream&, const float* X, TensorView vx, float* Y,
+void cpu_dropout(const Stream&, const float* X, TensorView vx, float* Y,
                    uint64_t seed, uint64_t offset, float p, float scale,
                    int64_t n) {
   for (int64_t i{0}; i < n; ++i) {

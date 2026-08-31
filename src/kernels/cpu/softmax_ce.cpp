@@ -1,4 +1,4 @@
-#include "naive_kernels.h"
+#include "cpu_kernels.h"
 
 #include <cmath>
 #include <cassert>
@@ -14,7 +14,7 @@ namespace nn::kernels {
 // subtracting the row max keeps every exponent <= 0, avoiding overflow, and
 // log(probs[i,label]) is computed as (z[label] - m) - log(s) rather than
 // from probs directly, since s can grow large and probs[label] can be tiny.
-void naive_softmax_ce(const Stream&, const float* logits, const int32_t* labels,
+void cpu_softmax_ce(const Stream&, const float* logits, const int32_t* labels,
                       float* loss_out, float* probs, int M, int N, int64_t sz) {
   assert(M >= 0 && N > 0);
   float total_loss = 0.0f;
@@ -54,7 +54,7 @@ void naive_softmax_ce(const Stream&, const float* logits, const int32_t* labels,
 // d(loss)/d(logits) = g_loss * (probs - one_hot(labels)) / M, applied as
 // scale * probs across the row and then subtracting scale at the label
 // column, where scale = g_loss / M.
-void naive_softmax_ce_backward(const Stream&, const float* probs, const int32_t* labels,
+void cpu_softmax_ce_backward(const Stream&, const float* probs, const int32_t* labels,
                                const float* g_loss, float* g_logits, int M, int N, int64_t sp) {
   assert(M >= 0 && N > 0);
 
@@ -74,10 +74,10 @@ void naive_softmax_ce_backward(const Stream&, const float* probs, const int32_t*
   }
 }
 
-// same as naive_softmax_ce, except each row's contribution to the loss is
+// same as cpu_softmax_ce, except each row's contribution to the loss is
 // scaled by weights[i]:
 //   loss = (1/M) * sum_i weights[i] * -((z[label] - max) - log(sum))
-void naive_softmax_ce_weighted(const Stream&, const float* logits, const int32_t* labels,
+void cpu_softmax_ce_weighted(const Stream&, const float* logits, const int32_t* labels,
                                const float* weights, float* loss_out, float* probs,
                                int M, int N, int64_t sz) {
   assert(M >= 0 && N > 0);
@@ -115,9 +115,9 @@ void naive_softmax_ce_weighted(const Stream&, const float* logits, const int32_t
   *loss_out = (M > 0) ? total_loss / static_cast<float>(M) : 0.0f;
 }
 
-// same as naive_softmax_ce_backward, except each row gets its own scale:
+// same as cpu_softmax_ce_backward, except each row gets its own scale:
 //   scale_i = weights[i] * g_loss / M
-void naive_softmax_ce_weighted_backward(const Stream&, const float* probs, const int32_t* labels,
+void cpu_softmax_ce_weighted_backward(const Stream&, const float* probs, const int32_t* labels,
                                         const float* weights, const float* g_loss, float* g_logits,
                                         int M, int N, int64_t sp) {
   assert(M >= 0 && N > 0);

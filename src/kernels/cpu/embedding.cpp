@@ -1,4 +1,4 @@
-#include "naive_kernels.h"
+#include "cpu_kernels.h"
 
 #include <cstring>
 
@@ -6,7 +6,7 @@
 
 namespace nn::kernels {
 
-void naive_embedding(const Stream&, const float* W, const int32_t* idx,
+void cpu_embedding(const Stream&, const float* W, const int32_t* idx,
                      float* Y, int64_t n_idx, int D, int V) {
   for (int64_t i = 0; i < n_idx; ++i) {
     const int32_t v = idx[i];
@@ -22,7 +22,7 @@ void naive_embedding(const Stream&, const float* W, const int32_t* idx,
   }
 }
 
-void naive_embedding_backward(const Stream&, const float* G, const int32_t* idx,
+void cpu_embedding_backward(const Stream&, const float* G, const int32_t* idx,
                               float* gW, int64_t n_idx, int D, int V) {
   for (int64_t i = 0; i < n_idx; ++i) {
     const int32_t v = idx[i];

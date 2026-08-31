@@ -1,4 +1,4 @@
-#include "naive_kernels.h"
+#include "cpu_kernels.h"
 
 #include <cstring>
 
@@ -84,7 +84,7 @@ void gemm_tt(const float* A, const float* B, float* C, int M, int N, int K,
 
 }  // namespace
 
-void naive_gemm(const Stream&, const float* A, const float* B, float* C,
+void cpu_gemm(const Stream&, const float* A, const float* B, float* C,
                 int M, int N, int K, int64_t lda, int64_t ldb, int64_t ldc,
                 bool transA, bool transB,
                 int batch, int64_t sa, int64_t sb, int64_t sc) {

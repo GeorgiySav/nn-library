@@ -5,7 +5,7 @@
 #include <stdexcept>
 #include <string>
 
-#include "naive/naive_kernels.h"
+#include "cpu/cpu_kernels.h"
 #if defined(NN_WITH_CUDA)
 #include "cuda/cuda_kernels.h"
 #endif
@@ -49,15 +49,15 @@ const char* active_backend_name(Device d) {
 }
 
 // NN_KERNEL is expanded once per kernel listed in kernel_list.def, so every
-// slot in the table gets wired to its naive_* implementation here without
+// slot in the table gets wired to its cpu_* implementation here without
 // naming them one by one.
-void register_naive_kernels() {
+void register_cpu_kernels() {
   KernelTable& t = table(Device::CPU);
-#define NN_KERNEL(name, Type) t.name = &naive_##name;
+#define NN_KERNEL(name, Type) t.name = &cpu_##name;
 #include <kernels/kernel_list.def>
 #undef NN_KERNEL
 
-  g_backend[index_of(Device::CPU)] = "naive";
+  g_backend[index_of(Device::CPU)] = "cpu";
 }
 
 #if defined(NN_WITH_CUDA)
@@ -105,7 +105,7 @@ void register_cublas_kernels() {
 // kernel table.
 void init_kernels() {
   static const bool once = [] {
-    register_naive_kernels();
+    register_cpu_kernels();
 
     validate_table(Device::CPU);
 

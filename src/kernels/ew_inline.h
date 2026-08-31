@@ -1,7 +1,7 @@
 #pragma once
 
 // NN_EW_INLINE marks a function that must compile identically as plain host
-// C++ (included by the naive backend) and as CUDA __host__ __device__ code
+// C++ (included by the cpu backend) and as CUDA __host__ __device__ code
 // (included by the CUDA backend). one definition, both backends, so they
 // can never disagree about what an op computes.
 #if defined(__CUDACC__)

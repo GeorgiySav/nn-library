@@ -5,7 +5,7 @@
 
 // forward/backward arithmetic for every unary op, one struct per op. each
 // fwd/bwd is NN_EW_INLINE, so it compiles once and is reused as plain host
-// code (naive backend) and as __host__ __device__ code (CUDA backend), one
+// code (cpu backend) and as __host__ __device__ code (CUDA backend), one
 // definition for both backends.
 //
 // kNeeds says which of x, y the backward method actually reads, one of

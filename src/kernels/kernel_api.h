@@ -155,7 +155,7 @@ struct KernelTable {
 
 KernelTable& table(Device d);
 const KernelTable& kernels(Device d);
-void register_naive_kernels();
+void register_cpu_kernels();
 // throws if any slot is still null. a forgotten registration would otherwise
 // be a null call at first use, arbitrarily far from the omission.
 void validate_table(Device d);

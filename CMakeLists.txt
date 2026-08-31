@@ -122,7 +122,7 @@ if(NN_WITH_CUDA)
 endif()
 add_library(nn STATIC ${NN_SOURCES})
 target_include_directories(nn PUBLIC include)
-# Backend-private headers (cuda_common.h, and naive_kernels.h by its own path).
+# Backend-private headers (cuda_common.h, and cpu_kernels.h by its own path).
 # PRIVATE: consumers must never see these, and cuda_common.h in particular
 # would drag <cuda_runtime.h> onto the public surface.
 target_include_directories(nn PRIVATE src third_party)

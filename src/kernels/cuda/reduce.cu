@@ -124,7 +124,7 @@ void cuda_gather_rows_i32(const Stream& s, const int32_t* src, const int32_t* id
 }
 
 // total <= 0 (a caller passing an all-zero row) has no host-side check to
-// fall back on here, unlike naive_multinomial -- a device kernel cannot
+// fall back on here, unlike cpu_multinomial -- a device kernel cannot
 // throw, so it clamps to the last column instead of reading garbage.
 __global__ void multinomial_kernel(const float* __restrict__ W, int32_t* __restrict__ out,
                                    int M, int N, int64_t sx, uint64_t seed, uint64_t offset) {

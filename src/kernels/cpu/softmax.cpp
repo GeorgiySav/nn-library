@@ -1,4 +1,4 @@
-#include "naive_kernels.h"
+#include "cpu_kernels.h"
 
 #include <cmath>
 #include <cassert>
@@ -8,7 +8,7 @@
 namespace nn::kernels {
 
 // softmax over the last axis. rows of X have stride sx; Y is dense.
-void naive_softmax_rows(const Stream&, const float* X, float* Y,
+void cpu_softmax_rows(const Stream&, const float* X, float* Y,
                         int M, int N, int64_t sx) {
   for (int i{0}; i < M; ++i) {
     const float* x = X + int64_t(i) * sx;
@@ -37,7 +37,7 @@ void naive_softmax_rows(const Stream&, const float* X, float* Y,
 // the Jacobian of a softmax row is diag(y) - y y^T, so
 //   gX = y * (g - dot(y, g))
 // and the whole row collapses to one dot product.
-void naive_softmax_rows_backward(const Stream&, const float* Y, const float* G,
+void cpu_softmax_rows_backward(const Stream&, const float* Y, const float* G,
                                  float* gX, int M, int N,
                                  int64_t sy, int64_t sg) {
   for (int i{0}; i < M; ++i) {

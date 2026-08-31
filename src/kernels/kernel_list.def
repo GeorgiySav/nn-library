@@ -2,13 +2,13 @@
 // generates, from a single line per kernel:
 //
 //   kernel_api.h      the KernelTable slot
-//   naive_kernels.h   the naive_<name> declaration
+//   cpu_kernels.h     the cpu_<name> declaration
 //   cuda_kernels.h    the cuda_<name> declaration
 //   registry.cpp      both backends' registrations, and the null check
 //
 // That works because every backend function is named <backend>_<slot> and the
 // Fn aliases are function types rather than pointers-to-function, so a line
-// like `GemmFn naive_gemm;` declares a function with exactly the signature the
+// like `GemmFn cpu_gemm;` declares a function with exactly the signature the
 // table wants. Add a kernel by adding a line here, the alias in kernel_api.h,
 // and the two bodies -- nothing else.
 //

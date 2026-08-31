@@ -4,7 +4,7 @@
 
 namespace nn::kernels {
 
-// Generated from the one kernel list; see naive_kernels.h for why this works.
+// Generated from the one kernel list; see cpu_kernels.h for why this works.
 #define NN_KERNEL(name, Type) Type cuda_##name;
 #include <kernels/kernel_list.def>
 #undef NN_KERNEL
