@@ -36,7 +36,7 @@ std::string element(const Tensor& t, int64_t i, const Style& st) {
 }
 
 struct Scan {
-  float lo = 0.0f, hi = 0.0f;   // most negative, largest magnitude
+  float lo = 0.0f, hi = 0.0f;
   float max_abs = 0.0f;
   int64_t nans = 0, infs = 0;
 };
@@ -88,6 +88,8 @@ void pad_to(std::string& out, const std::string& s, int width) {
   out += s;
 }
 
+// Recursively renders one axis at a time, numpy-style: nested brackets, and
+// when an axis is longer than 2*edge, the middle is elided to "...".
 void emit(std::string& out, const Tensor& t, const Style& st,
           const int64_t* cstride, int axis, int64_t base, int edge) {
   const Shape& s = t.shape();
@@ -165,6 +167,8 @@ std::string to_string(const Tensor& t, int edge) {
   int64_t acc = 1;
   for (int i = s.rank() - 1; i >= 0; --i) { cstride[i] = acc; acc *= s.dim(i); }
 
+  // Shrink the edge until the elided printout would stay under the budget,
+  // so huge tensors don't dump thousands of elements to the console.
   constexpr int64_t kMaxPrinted = 4096;
   for (;;) {
     int64_t printed = 1;

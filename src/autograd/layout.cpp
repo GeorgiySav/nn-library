@@ -76,6 +76,8 @@ Tensor reshape(const Tensor& x, const Shape& shape) {
 
   record_op(out, "reshape",
     [sx = x.shape()](const Tensor& g, std::span<Tensor> g_in) {
+      // reshape_view needs contiguous strides; pack materializes a copy first
+      // when g's own layout (e.g. from a prior permute) doesn't already match.
       g_in[0] = g.is_contiguous() ? g.reshape_view(sx) : g.pack().reshape_view(sx);
     }, x);
 
@@ -112,7 +114,7 @@ Tensor expand(const Tensor& x, const Shape& to) {
   return out;
 }
 
-// cat does not go through record_op either: it has a variable number of
+// cat does not go through record_op either. It has a variable number of
 // inputs, and its backward hands each one a different window of the incoming
 // gradient, so it builds the input list itself.
 Tensor cat(std::span<const Tensor> parts, int dim) {

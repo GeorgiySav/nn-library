@@ -75,6 +75,7 @@ void adam(const Tensor& p, const Tensor& g, Tensor& m, Tensor& v,
     throw std::invalid_argument("All tensors must have the same shape for adam");
   }
 
+  // bias correction for the moments being biased toward zero on early steps
   const float bc1 = 1.0f - std::pow(beta1, step);
   const float bc2 = 1.0f - std::pow(beta2, step);
 

@@ -3,16 +3,15 @@
 #include <kernels/ew_inline.h>
 #include <nn/ops/op_enums.h>
 
-// Per-op forward/backward arithmetic for every unary op. Each fwd/bwd is
-// NN_EW_INLINE, so it compiles once and is reused as plain host code (naive
-// backend) and as __host__ __device__ code (CUDA backend): one definition,
-// both backends, the same guarantee NN_EW_INLINE bought the old switch-case
-// bodies.
+// forward/backward arithmetic for every unary op, one struct per op. each
+// fwd/bwd is NN_EW_INLINE, so it compiles once and is reused as plain host
+// code (naive backend) and as __host__ __device__ code (CUDA backend), one
+// definition for both backends.
 //
-// kNeeds says which of x, y the backward method actually reads: None, X, Y
-// or Both. 
+// kNeeds says which of x, y the backward method actually reads, one of
+// None, X, Y or Both.
 //
-// To add an op: add a struct below, add it to the All alias at the bottom,
+// to add an op, add a struct below, add it to the All alias at the bottom,
 // and add its (Name, method) row to unary_ops.def.
 
 namespace nn::kernels::unary_ops {
@@ -94,7 +93,7 @@ struct Sigmoid {
   NN_EW_INLINE static float bwd(float, float y, float g) { return g * y * (1.0f - y); }
 };
 
-// Exact GELU
+// exact GELU (using erf), not the tanh approximation
 struct Gelu {
   static constexpr UnaryOp kOp = UnaryOp::Gelu;
   static constexpr UnaryNeeds kNeeds = UnaryNeeds::X;
@@ -107,7 +106,7 @@ struct Gelu {
   }
 };
 
-// x * sigmoid(x)
+// silu(x) = x * sigmoid(x)
 struct Silu {
   static constexpr UnaryOp kOp = UnaryOp::Silu;
   static constexpr UnaryNeeds kNeeds = UnaryNeeds::X;
@@ -133,6 +132,9 @@ struct Cos {
 
 namespace detail {
 
+// walks the op list Ops... one at a time, comparing each Op::kOp against the
+// runtime op code until it matches; recursion bottoms out at the last type
+// in the pack rather than an explicit base case.
 template <class Op, class... Rest>
 NN_EW_INLINE float dispatch_fwd(UnaryOp op, float x) {
   if (op == Op::kOp) return Op::fwd(x);
@@ -151,7 +153,7 @@ template <class Op, class... Rest>
 inline UnaryNeeds dispatch_needs(UnaryOp op) {
   if (op == Op::kOp) return Op::kNeeds;
   if constexpr (sizeof...(Rest) > 0) return dispatch_needs<Rest...>(op);
-  else return UnaryNeeds::Both;  // unknown op: keep everything rather than drop a gradient
+  else return UnaryNeeds::Both;  // unknown op, so keep everything rather than drop a gradient
 }
 
 }  // namespace detail

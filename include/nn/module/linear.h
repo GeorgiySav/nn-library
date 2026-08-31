@@ -33,6 +33,8 @@ public:
   Tensor& weight() { return w_; }
   Tensor& bias()   { return b_; }
 
+  // Set when weight() is tied to an Embedding's [vocab, dim] table, which is
+  // the transpose of the [in_features, out_features] shape this layer wants.
   void set_transposed_weight(bool transposed = true) { transposed_weight_ = transposed; }
 
 private:

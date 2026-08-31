@@ -7,14 +7,12 @@
 
 namespace nn::kernels {
 
+// one block per row, striding over rows if M exceeds the grid; sz is the
+// logits row stride (== N when dense), probs is always written dense
 __global__ void softmax_ce_kernel(const float* logits, const int32_t* labels,
                                   float* loss_out, float* probs, int M, int N, int64_t sz) {
-  // one block per row
-  // M blocks, each with 256 threads
-  // striding across N columns
-  // sz is the logits row stride (== N when dense); probs is always dense
   const float max_identity = -FLT_MAX;
-  
+
   __shared__ float sum_bcast;
   __shared__ float max_bcast;
   __shared__ int32_t label;
@@ -22,46 +20,49 @@ __global__ void softmax_ce_kernel(const float* logits, const int32_t* labels,
   for (int64_t row = blockIdx.x; row < M; row += gridDim.x) {
     const float* z = logits + row * sz;
     float* p = probs + row * N;
-    
-    // Max
+
     float max = -FLT_MAX;
     for (int c = threadIdx.x; c < N; c += blockDim.x) {
       if (z[c] > max) max = z[c];
     }
-    
-    max = block_reduce(max, Max(), max_identity); 
+
+    // block_reduce leaves the reduced value correct only on threadIdx.x==0;
+    // stash it in shared memory so every thread can read it back after the sync
+    max = block_reduce(max, Max(), max_identity);
     if (threadIdx.x == 0) {
       max_bcast = max;
       label = labels[row];
     }
     __syncthreads();
     max = max_bcast;
-    
-    // Sum of exp
+
+    // subtracting the row max before exp keeps exp_z in (0, 1], avoiding overflow
     float sum = 0.0f;
     for (int c = threadIdx.x; c < N; c += blockDim.x) {
       float exp_z = expf(z[c] - max);
       p[c] = exp_z;
       sum += exp_z;
     }
-    
+
     sum = block_reduce(sum, Plus(), 0.0f);
     if (threadIdx.x == 0) sum_bcast = sum;
     __syncthreads();
     sum = sum_bcast;
 
-    // Normalise
     const float inv_s = 1.0f / sum;
     for (int c = threadIdx.x; c < N; c += blockDim.x) {
       p[c] *= inv_s;
     }
 
+    // log-sum-exp: log(sum of exp(z - max)) + max == log(sum of exp(z)), so
+    // this is -(z[label] - logsumexp(z)), the cross-entropy loss for this row
     if (threadIdx.x == 0)
       atomicAdd(loss_out,
         -((z[label] - max) - logf(sum)) / float(M)
       );
+    // bcast shared vars are reused by the next row this block takes
     __syncthreads();
-  } 
+  }
 }
 
 __global__ void softmax_ce_backward_kernel(const float* probs, const int32_t* labels,
@@ -69,6 +70,8 @@ __global__ void softmax_ce_backward_kernel(const float* probs, const int32_t* la
 
   const float scale = *g_loss / float(M);
 
+  // gradient of softmax cross-entropy w.r.t. logits is (probs - one_hot(label)) * dL,
+  // so every column gets probs*scale and the label column gets an extra -scale
   for (int64_t row = blockIdx.x; row < M; row += gridDim.x) {
     const float* p = probs + row * sp;
     float* g = g_logits + row * N;
@@ -77,7 +80,7 @@ __global__ void softmax_ce_backward_kernel(const float* probs, const int32_t* la
     for (int64_t col = threadIdx.x; col < N; col += blockDim.x) {
       g[col] = scale * p[col];
     }
-    __syncthreads();
+    __syncthreads();  // wait for g[label] to be written before adjusting it below
 
     if (threadIdx.x == 0) {
       g[label] -= scale;
@@ -114,11 +117,10 @@ void cuda_softmax_ce_backward(const Stream& s, const float* probs, const int32_t
   NN_CUDA_CHECK_LAUNCH(stream);
 }
 
+// same as softmax_ce_kernel, but each row's loss contribution is scaled by weights[row]
 __global__ void softmax_ce_weighted_kernel(const float* logits, const int32_t* labels,
                                   const float* weights, float* loss_out, float* probs,
                                   int M, int N, int64_t sz) {
-  // Same as softmax_ce_kernel, but each row's contribution is scaled by
-  // weights[row].
   const float max_identity = -FLT_MAX;
 
   __shared__ float sum_bcast;
@@ -129,7 +131,6 @@ __global__ void softmax_ce_weighted_kernel(const float* logits, const int32_t* l
     const float* z = logits + row * sz;
     float* p = probs + row * N;
 
-    // Max
     float max = -FLT_MAX;
     for (int c = threadIdx.x; c < N; c += blockDim.x) {
       if (z[c] > max) max = z[c];
@@ -143,7 +144,6 @@ __global__ void softmax_ce_weighted_kernel(const float* logits, const int32_t* l
     __syncthreads();
     max = max_bcast;
 
-    // Sum of exp
     float sum = 0.0f;
     for (int c = threadIdx.x; c < N; c += blockDim.x) {
       float exp_z = expf(z[c] - max);
@@ -156,7 +156,6 @@ __global__ void softmax_ce_weighted_kernel(const float* logits, const int32_t* l
     __syncthreads();
     sum = sum_bcast;
 
-    // Normalise
     const float inv_s = 1.0f / sum;
     for (int c = threadIdx.x; c < N; c += blockDim.x) {
       p[c] *= inv_s;
@@ -185,7 +184,7 @@ __global__ void softmax_ce_weighted_backward_kernel(const float* probs, const in
     for (int64_t col = threadIdx.x; col < N; col += blockDim.x) {
       g[col] = scale * p[col];
     }
-    __syncthreads();
+    __syncthreads();  // wait for g[label] to be written before adjusting it below
 
     if (threadIdx.x == 0) {
       g[label] -= scale;
@@ -239,6 +238,7 @@ __global__ void softmax_rows_kernel(const float* __restrict__ X, float* __restri
     __syncthreads();
     m = bcast;
 
+    // subtracting the row max before exp avoids overflow for large inputs
     float sum = 0.0f;
     for (int c = threadIdx.x; c < N; c += blockDim.x) {
       const float e = expf(x[c] - m);
@@ -266,6 +266,8 @@ __global__ void softmax_rows_backward_kernel(const float* __restrict__ Y,
     const float* g = G + row * sg;
     float* out = gX + row * N;
 
+    // softmax backward is y * (g - dot(y, g)); the dot product needs every
+    // column's contribution, hence the block-wide reduction before it can be used
     float dot = 0.0f;
     for (int c = threadIdx.x; c < N; c += blockDim.x) dot += y[c] * g[c];
     dot = block_reduce(dot, Plus(), 0.0f);

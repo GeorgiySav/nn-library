@@ -11,6 +11,8 @@ void naive_embedding(const Stream&, const float* W, const int32_t* idx,
   for (int64_t i = 0; i < n_idx; ++i) {
     const int32_t v = idx[i];
     float* y = Y + i * D;
+    // out-of-range index rows are zeroed rather than rejected, since a
+    // padding id is a normal thing to embed.
     if (v < 0 || v >= V) {
       std::memset(y, 0, size_t(D) * sizeof(float));
       continue;
@@ -27,6 +29,8 @@ void naive_embedding_backward(const Stream&, const float* G, const int32_t* idx,
     if (v < 0 || v >= V) continue;
     const float* g = G + i * D;
     float* w = gW + int64_t(v) * D;
+    // += rather than =, since the same row v can appear at more than one i
+    // and every occurrence must contribute to its gradient.
     for (int d = 0; d < D; ++d) w[d] += g[d];
   }
 }

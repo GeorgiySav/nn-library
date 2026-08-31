@@ -73,6 +73,8 @@ Tensor sum_dim(const Tensor& x, int dim, bool keepdim) {
 Tensor mean_dim(const Tensor& x, int dim, bool keepdim) {
   const int d = x.shape().resolve_dim(dim, "mean");
   const int n = x.shape().dim(d);
+  // mean is sum divided by the size of the reduced axis, taken before keepdim
+  // collapses it, so n is read while d still names that axis in x's shape
   return scalar(ScalarOp::MulScalar, sum_dim(x, d, keepdim), 1.0f / float(n));
 }
 

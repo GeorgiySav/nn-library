@@ -13,9 +13,8 @@ namespace nn::ops {
   }
 }
 
-// GEMMs and row-wise reductions absorb the stride between rows; they cannot
-// absorb a gap between elements within a row. Returns the row stride to pass
-// down
+// GEMMs and row-wise reductions absorb the stride between rows, but not a
+// gap between elements within a row, so the innermost axis must be dense.
 [[maybe_unused]] static int64_t row_stride_of(const Tensor& t, const char* op) {
   const int r = t.shape().rank();
   if (r < 2) {

@@ -19,7 +19,9 @@ MultiHeadAttention::MultiHeadAttention(int embed_dim,
 }
 
 Tensor MultiHeadAttention::forward(const Tensor& Q, const Tensor& K, const Tensor& V) {
-  // Q, K, V: [b, t, e]
+  // Q, K, V: [b, t, e]. Project to q/k/v, split each into per-head slices,
+  // attend within each head independently, then merge the heads back into
+  // one embed_dim vector per token before the output projection.
   Tensor sQ = split_heads(wQ_.forward(Q)); // [b, nh, t, e/nh]
   Tensor sK = split_heads(wK_.forward(K));
   Tensor sV = split_heads(wV_.forward(V));
@@ -31,7 +33,10 @@ Tensor MultiHeadAttention::forward(const Tensor& Q, const Tensor& K, const Tenso
 }
 
 Tensor MultiHeadAttention::split_heads(const Tensor& x) {
-  // [b, t, e] -> [b, nh, t, e/nh]
+  // [b, t, e] -> [b, t, nh, e/nh] -> [b, nh, t, e/nh]. The transpose puts the
+  // head axis before the sequence axis so attention below can batch over
+  // (b, nh) and matmul over the trailing (t, e/nh) pair; contiguous() makes
+  // that transposed layout dense since matmul needs a packed inner axis.
   const int r = x.rank();
   if (r+1 > kMaxShapeRank) throw std::invalid_argument("split_heads: rank too large");
 
@@ -46,10 +51,12 @@ Tensor MultiHeadAttention::split_heads(const Tensor& x) {
 }
 
 Tensor MultiHeadAttention::scaled_dot_product_attention(const Tensor& Q, const Tensor& K, const Tensor& V) {
+  // No mask here: this module is plain bidirectional self/cross-attention.
   return nn::scaled_dot_product_attention(Q, K, V, Tensor());
 }
 
 Tensor MultiHeadAttention::combine_heads(const Tensor& x) {
+  // Inverse of split_heads: [b, nh, t, e/nh] -> [b, t, nh, e/nh] -> [b, t, e].
   const int r = x.rank();
   Tensor t = x.transpose(-3, -2);
 

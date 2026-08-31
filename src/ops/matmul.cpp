@@ -57,7 +57,7 @@ bool flat_batch_stride(const Tensor& t, int64_t nbatch, int64_t& out) {
     v.stride[v.rank] = s;
     ++v.rank;
   }
-  if (v.rank == 0) { out = 0; return true; }          // every batch axis is 1
+  if (v.rank == 0) { out = 0; return true; }  // every batch axis is 1
   if (v.rank == 1 && v.shape[0] == nbatch) { out = v.stride[0]; return true; }
   return false;
 }
@@ -120,6 +120,9 @@ Tensor matmul(const Tensor& a, const Tensor& b, bool transA, bool transB) {
   const auto& k = nn::kernels::kernels(a.device());
   const Stream& s = current_stream(a.device());
 
+  // Common case: a batch of rows against one shared matrix b, e.g. a linear
+  // layer applied to a [batch, seq, in] activation. Folding a's leading axes
+  // into rows lets this run as a single GEMM instead of one per batch entry.
   if (a_batch.rank() > 0 && b_batch.rank() == 0 && !transA) {
     int64_t rows = 0, row_stride = 0;
     if (!foldable_rows(a, rows, row_stride)) {

@@ -45,6 +45,7 @@ public:
     reset();
   }
 
+  // Fisher-Yates shuffle of the row order, done in place
   void reset() {
     cursor_ = 0;
     if (!shuffle_) return;
@@ -70,8 +71,10 @@ public:
 
     const int n = std::min(batch_, ds_->size() - cursor_);
 
+    // one tensor per field, always allocated on the host since gather()
+    // fills them via row_span, then moved to the target device below
     Batch batch;
-    for (int f = 0; f < N; ++f) {   // N fields, each [n, ...]
+    for (int f = 0; f < N; ++f) {
       batch[f] = Tensor(batched_shape(fields_[f].shape, n),
                         Device::CPU, fields_[f].dtype);
     }
@@ -80,10 +83,13 @@ public:
     cursor_ += n;
 
     for (Tensor& t : batch) t = t.to(device_);
-    return batch; 
+    return batch;
   }
 
 private:
+  // uniform random value in [0, n), rejecting the low draws that would
+  // make some outputs more likely than others under plain modulo bias
+  // (threshold is 2^32 mod n, computed via unsigned wraparound)
   uint32_t bounded(uint32_t n) {
     const uint32_t threshold = (0u - n) % n;
     uint32_t v;

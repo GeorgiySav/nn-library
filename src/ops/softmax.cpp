@@ -28,6 +28,8 @@ Rows rows_of(const Tensor& x) {
 
   if (x.is_contiguous()) return {x, M, N, N};
 
+  // A view whose rows are contiguous but evenly spaced can still be read
+  // directly with a row stride; anything else needs a dense copy first.
   const TensorView v = view_of(x);
   if (v.rank == 2 && v.shape[1] == N && v.stride[1] == 1) {
     return {x, M, N, v.stride[0]};

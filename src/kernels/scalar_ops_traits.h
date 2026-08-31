@@ -3,10 +3,10 @@
 #include <kernels/ew_inline.h>
 #include <nn/ops/op_enums.h>
 
-// Per-op forward/backward arithmetic for every "tensor combined with a host
-// float" op. `y` is the forward result, `g` the incoming gradient, `k` the
-// scalar operand. See unary_ops_traits.h for the dispatch mechanism and the
-// "add an op" recipe.
+// forward/backward arithmetic for every "tensor combined with a host float"
+// op. y is the forward result, g the incoming gradient, k the scalar
+// operand. see unary_ops_traits.h for the dispatch mechanism and how to add
+// a new op.
 
 namespace nn::kernels::scalar_ops {
 
@@ -31,6 +31,8 @@ struct RsubScalar {
 struct RdivScalar {
   static constexpr ScalarOp kOp = ScalarOp::RdivScalar;
   NN_EW_INLINE static float fwd(float x, float k) { return k / x; }
+  // d/dx of k/x is -k/x^2, which is -y/x since y = k/x, avoiding a second
+  // division.
   NN_EW_INLINE static float bwd(float x, float y, float g, float) { return -g * y / x; }
 };
 
@@ -54,8 +56,8 @@ struct ClampMax {
   NN_EW_INLINE static float bwd(float x, float, float g, float k) { return x < k ? g : 0.0f; }
 };
 
-// Predicates, for building masks: a step function, so the gradient is zero
-// everywhere it is defined.
+// predicates used to build masks. each is a step function, so the gradient
+// is zero everywhere it's defined.
 struct GtScalar {
   static constexpr ScalarOp kOp = ScalarOp::GtScalar;
   NN_EW_INLINE static float fwd(float x, float k) { return float(x > k); }

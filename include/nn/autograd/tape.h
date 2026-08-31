@@ -22,7 +22,7 @@ struct Node {
   Dtor  destroy  = nullptr;
   void* captures = nullptr; // lives in the tape's arena
 
-  NodeInputs inputs;                   // node ids
+  NodeInputs inputs;                   // node ids, not tensors
   std::shared_ptr<AutogradMeta> leaf; // non-null -> accumulate into leaf->grad
   const char* name = "";       // for debugging
 };
@@ -73,7 +73,7 @@ private:
   int record_leaf(std::shared_ptr<AutogradMeta> m);
   // true if 'm' was stamped by this tape
   bool owns(const AutogradMeta& m) const;
-  // stamp a tensor's meat as produced by a node 'id' on this tape
+  // stamp a tensor's meta as produced by a node 'id' on this tape
   void bind(AutogradMeta& m, int id) const;
 
   std::vector<Node> nodes_;
@@ -101,7 +101,7 @@ private:
 };
 
 // A tape and its activation together, which is what a training step actually
-// wants: declaring one at the top of the loop body makes everything below it
+// wants. Declaring one at the top of the loop body makes everything below it
 // record, and destroying it at the end of the iteration frees the arena.
 //
 //   for (auto [xb, yb] : loader) {
@@ -120,7 +120,7 @@ public:
   Tape& tape() { return tape_; }
 
 private:
-  Tape tape_;        // declared first: scope_ activates it on construction
+  Tape tape_;        // must be declared before scope_, which activates it on construction
   TapeScope scope_;
 };
 

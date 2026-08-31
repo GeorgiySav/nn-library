@@ -3,17 +3,15 @@
 #include <kernels/ew_inline.h>
 #include <nn/ops/op_enums.h>
 
-// Per-op forward/backward arithmetic for every binary op. `c` is the
-// forward result, `g` the incoming gradient. dfda/dfdb are the two
-// derivative columns the old binary_ops.def carried side by side --
-// apply_binary_backward's runtime `side` (0 = d/da, 1 = d/db) still picks
-// between them once, outside any per-op code, exactly as the old two-pass
-// switch did. Both operands are broadcast to a common shape before the
-// kernel runs, so dfda/dfdb produce gradients of the broadcast shape;
-// ops::binary_backward sums them back down.
+// forward/backward arithmetic for every binary op, one struct per op. c is
+// the forward result and g the incoming gradient. dfda and dfdb are the two
+// partial derivatives, and apply_binary_backward picks between them at
+// runtime with side (0 for d/da, 1 for d/db). both operands are broadcast to
+// a common shape before the kernel runs, so dfda/dfdb produce gradients at
+// that broadcast shape, and ops::binary_backward sums them back down to the
+// original operand shapes.
 //
-// See unary_ops_traits.h for the dispatch mechanism and the "add an op"
-// recipe.
+// see unary_ops_traits.h for the dispatch mechanism and how to add a new op.
 
 namespace nn::kernels::binary_ops {
 
@@ -38,8 +36,8 @@ struct Mul {
   NN_EW_INLINE static float dfdb(float a, float, float, float g) { return g * a; }
 };
 
-// d/db of a/b is -a/b^2, which is -c/b -- one fewer division and one fewer
-// read, since the backward kernel already has c loaded.
+// d/db of a/b is -a/b^2, which simplifies to -c/b, saving a division since
+// the backward kernel already has c loaded.
 struct Div {
   static constexpr BinaryOp kOp = BinaryOp::Div;
   NN_EW_INLINE static float fwd(float a, float b) { return a / b; }

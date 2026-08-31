@@ -10,12 +10,16 @@ namespace {
 constexpr int kBlock = 256;
 constexpr int kMaxGrid = 4096;
 
+// grid is capped at kMaxGrid, so each thread strides over multiple elements
+// rather than launching one thread per element
 template<class T>
 __global__ void pack_kernel(const T* __restrict__ src, TensorView v,
                                     T* __restrict__ dst, int64_t n) {
   for (int64_t i = blockIdx.x * int64_t(blockDim.x) + threadIdx.x;
        i < n;
        i += int64_t(gridDim.x) * blockDim.x) {
+    // offset_of maps the dense index i to its strided location in src,
+    // so writes to dst are coalesced even though reads from src are not
     dst[i] = src[offset_of(v, i)];
   }
 }
@@ -52,6 +56,7 @@ __global__ void unpack_kernel(const T* __restrict__ src,
   for (int64_t i = blockIdx.x * int64_t(blockDim.x) + threadIdx.x;
        i < n;
        i += int64_t(gridDim.x) * blockDim.x) {
+    // mirror of pack_kernel: reads are dense, writes scatter into v's strided layout
     dst[offset_of(v, i)] = src[i];
   }
 }

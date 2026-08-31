@@ -8,14 +8,9 @@
 
 namespace nn::autograd {
 
-// Attach a backward to `out` on the active tape, or do nothing if there is no
-// tape (inference) or none of the inputs is on it. Every differentiable op in
-// this directory ends in a call to this.
-//
-// A function template rather than an inline function so `fn` stays a concrete
-// lambda type and gets captured by value into the tape without a type-erasing
-// allocation on the way. `static` keeps its instantiations internal to each
-// translation unit, matching the anonymous namespace it replaced.
+// Attaches a backward to `out` on the active tape, or does nothing if there is
+// no tape (inference) or none of the inputs is on it. Every differentiable op
+// in this directory ends with a call to this.
 template <class F, class... Ts>
 [[maybe_unused]] static void record_op(Tensor& out,
                                       const char* name,

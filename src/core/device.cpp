@@ -24,7 +24,7 @@ int cuda_device_count() {
 }
 
 namespace {
- 
+
 constexpr int kNumDevices = 2;
 constexpr int index_of(Device d) { return static_cast<int>(d); }
 

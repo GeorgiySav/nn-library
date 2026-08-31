@@ -6,6 +6,7 @@ namespace nn::kernels {
 
 namespace {
 
+// reads src through the strided view v and writes it out densely into dst.
 template<class T>
 void pack_impl(const T* src, TensorView v, T* dst, int64_t n) {
   for (int64_t i = 0; i < n; ++i) {
@@ -27,6 +28,8 @@ void naive_pack_i32(const Stream&, const int32_t* src, TensorView v,
 
 namespace {
 
+// reverse of pack_impl, reading src densely and scattering it into dst
+// through the strided view v.
 template<class T>
 void unpack_impl(const T* src, T* dst, TensorView v, int64_t n) {
   for (int64_t i = 0; i < n; ++i) {

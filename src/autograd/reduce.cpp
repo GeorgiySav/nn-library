@@ -9,9 +9,6 @@
 
 namespace nn::autograd {
 
-// sum_all does not go through record_op: its backward broadcasts a rank-0
-// gradient back over the whole input, so it needs the tape directly rather
-// than the shape-preserving pattern the helper assumes.
 Tensor sum_all(const Tensor& x) {
   Tensor out = ops::sum_all(x);
 
@@ -37,6 +34,7 @@ Tensor sum(const Tensor& x, int dim, bool keepdim) {
 
   record_op(out, "sum",
     [sx = x.shape(), d, keepdim](const Tensor& g, std::span<Tensor> g_in) {
+      // the gradient is just g broadcast back over the summed axis
       Shape kept = sx;
       kept.set_dim(d, 1);
       g_in[0] = (keepdim ? g : g.reshape_view(kept)).expand_view(sx);

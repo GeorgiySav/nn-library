@@ -13,6 +13,8 @@ namespace nn::data {
 
 namespace detail {
 
+// MNIST's IDX format stores every header field as big-endian u32, unlike the
+// rest of this library which is little-endian throughout
 inline uint32_t read_be32(std::istream& in) {
   unsigned char b[4];
   in.read(reinterpret_cast<char*>(b), 4);
@@ -31,7 +33,7 @@ inline std::ifstream open_or_throw(const std::string& path) {
 
 inline Tensor load_mnist_images(const std::string& path) {
   auto in = detail::open_or_throw(path);
-  if (detail::read_be32(in) != 0x00000803u) {
+  if (detail::read_be32(in) != 0x00000803u) {  // IDX magic for ubyte images
     throw std::runtime_error("mnist: bad image magic in " + path);
   }
   const uint32_t n    = detail::read_be32(in);
@@ -51,7 +53,7 @@ inline Tensor load_mnist_images(const std::string& path) {
 
 inline Tensor load_mnist_labels(const std::string& path) {
   auto in = detail::open_or_throw(path);
-  if (detail::read_be32(in) != 0x00000801u) {
+  if (detail::read_be32(in) != 0x00000801u) {  // IDX magic for ubyte labels
     throw std::runtime_error("mnist: bad label magic in " + path);
   }
   const uint32_t n = detail::read_be32(in);

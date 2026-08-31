@@ -24,6 +24,11 @@ void naive_argmax_rows(const Stream&, const float* X, int32_t* out, int M, int N
   }
 }
 
+// sums a gradient back down to a broadcast operand's original shape. keep
+// indexes the axes that survive (the operand's own shape) and red indexes
+// the axes that were broadcast away; for each surviving position j, offsets
+// from keep and red are added together to walk every g element that
+// broadcast from it, and those are summed into out[j].
 void naive_sum_to(const Stream&, const float* g, TensorView keep, TensorView red,
                   float* out, int64_t n_out, int64_t n_red) {
   for (int64_t j = 0; j < n_out; ++j) {
@@ -34,6 +39,9 @@ void naive_sum_to(const Stream&, const float* g, TensorView keep, TensorView red
   }
 }
 
+// accumulates in double despite the float inputs/output, since summing a
+// large tensor in float loses precision as the running total grows relative
+// to each new term.
 void naive_sum_all(const Stream&, const float* X, TensorView v, Accum a,
                    float* out, float*, int64_t n) {
   double acc = 0.0;
@@ -66,7 +74,7 @@ void gather_rows_impl(const T* src, const int32_t* idx, T* out, int M, int64_t s
 }  // namespace
 
 // idx is range-checked by ops::gather_rows before this ever runs, so the
-// kernel itself just reads.
+// kernel itself just reads without bounds checks.
 void naive_gather_rows(const Stream&, const float* src, const int32_t* idx,
                        float* out, int M, int64_t sx) {
   gather_rows_impl(src, idx, out, M, sx);
@@ -88,6 +96,8 @@ void naive_multinomial(const Stream&, const float* W, int32_t* out, int M, int N
                                   " has no positive weight");
     }
 
+    // inverse-CDF sampling. draw target uniformly over [0, total) and walk
+    // the running sum until it passes target.
     const float target = random_uniform(seed, offset + uint64_t(i)) * total;
     float cum = 0.0f;
     int chosen = N - 1;   // the slot a rounding error could leave uncovered

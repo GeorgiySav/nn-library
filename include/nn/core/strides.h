@@ -12,6 +12,9 @@ public:
   constexpr Strides() = default;
   constexpr explicit Strides(int rank) : rank_(rank) {}
 
+  // Row-major, densely packed strides for shape s: the last axis has
+  // stride 1, and each axis to its left steps by the product of everything
+  // to its right.
   static constexpr Strides contiguous_for(const Shape& s) {
     Strides st(s.rank());
     int64_t acc = 1;
@@ -24,6 +27,8 @@ public:
 
   constexpr int rank() const { return rank_; }
 
+  // Deducing `this` gives one body serving both the const and mutable
+  // overloads.
   template <class Self>
   constexpr auto& at(this Self& self, int i) {
     assert(i >= 0 && i < self.rank_);

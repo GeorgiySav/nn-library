@@ -29,6 +29,7 @@ Tensor embedding(const Tensor& weight, const Tensor& idx) {
   const int D = weight.shape().dim(1);
   const Tensor flat_idx = idx.pack();
 
+  // output shape is idx's shape with a row of the table appended
   int dims[kMaxShapeRank] = {0};
   const int r = idx.shape().rank();
   for (int i = 0; i < r; ++i) dims[i] = idx.shape().dim(i);
@@ -54,6 +55,8 @@ Tensor embedding_backward(const Tensor& g, const Tensor& idx, int V) {
   const Tensor dense_g = g.pack();
   const Tensor flat_idx = idx.pack();
 
+  // rows repeated in idx must accumulate, so the backward scatter-adds into
+  // a zeroed table rather than overwriting rows
   Tensor gw = Tensor::zeros(Shape{V, D}, g.device(), g.dtype());
   const auto& k = nn::kernels::kernels(g.device());
   k.embedding_backward(current_stream(g.device()), dense_g.device_ptr(),

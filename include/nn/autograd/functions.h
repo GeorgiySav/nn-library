@@ -25,7 +25,7 @@ Tensor scalar(ops::ScalarOp op, const Tensor& x, float k);
 // as [N, K] instead
 Tensor matmul(const Tensor& x, const Tensor& w, bool transA = false, bool transB = false);
 Tensor cross_entropy(const Tensor& logits, const Tensor& labels); // rank 0
-// Per-row-weighted: loss = (1/M) * sum_i weights[i] * nll(logits[i], labels[i]).
+// per-row-weighted loss, (1/M) * sum_i weights[i] * nll(logits[i], labels[i]).
 // weights is a plain [M] float tensor and never itself needs a gradient.
 Tensor cross_entropy(const Tensor& logits, const Tensor& labels, const Tensor& weights);
 
@@ -63,8 +63,8 @@ Tensor masked_fill(const Tensor& x, const Tensor& mask, float value);
 // their last dim (dk); k and v must share their second-to-last dim (Tk).
 //
 // mask is optional (pass an undefined Tensor for none) and uses the "keep"
-// convention already established by tril_mask/masked_fill in this codebase:
-// 1 = attend, 0 = masked out. It broadcasts against the [.., Tq, Tk] score
+// convention already established by tril_mask/masked_fill in this codebase
+// (1 = attend, 0 = masked out). It broadcasts against the [.., Tq, Tk] score
 // matrix the same way any other elementwise operand does, so a padding mask
 // shaped [B, 1, 1, Tk] or a precomputed [Tq, Tk] mask both work. is_causal
 // ANDs in tril_mask(Tq) and requires Tq == Tk; dropout_p applies to the
@@ -77,7 +77,7 @@ Tensor scaled_dot_product_attention(const Tensor& q, const Tensor& k, const Tens
 
 namespace nn {
 
-// The differentiable ops, reachable without naming the tape machinery. The
+// the differentiable ops, reachable without naming the tape machinery. The
 // non-differentiable kernels keep their own names under nn::ops.
 using autograd::cat;
 using autograd::contiguous;

@@ -18,8 +18,7 @@ struct Stream {
   Device device = Device::CPU;
   void*  handle = nullptr; // cudaStream_t; null == device's default
 
-  // Blocks until work is finished
-  // No-op on CPU
+  // Blocks until work is finished; no-op on CPU.
   void synchronize() const;
 };
 
@@ -31,7 +30,8 @@ const Stream& default_stream(Device d);
 // stream ops will submit to right now, on this thread
 const Stream& current_stream(Device d);
 
-// redirects current_stream(s.device)
+// Redirects current_stream(s.device) to s for the scope's lifetime, then
+// restores whatever stream was active before.
 class StreamScope {
 public:
   explicit StreamScope(const Stream& s);

@@ -14,9 +14,7 @@ Tensor unary(ops::UnaryOp op, const Tensor& x) {
   Tensor out = ops::unary(op, x);
 
   // Keep alive only whichever of x, out the derivative actually reads (see
-  // unary_ops.def's Needs column). Almost every unary op reads at most one --
-  // capturing both unconditionally, as this used to, holds every activation
-  // in the network twice as long as its own backward needs, for nothing.
+  // unary_ops.def's Needs column).
   const kernels::UnaryNeeds needs = kernels::unary_needs(op);
   Tensor saved_x = kernels::needs_x(needs) ? x   : Tensor{};
   Tensor saved_y = kernels::needs_y(needs) ? out : Tensor{};

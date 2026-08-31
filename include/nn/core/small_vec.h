@@ -6,6 +6,8 @@
 
 namespace nn {
 
+// Fixed-capacity, stack-allocated vector. Capacity N is a compile-time bound;
+// it never reallocates and asserts rather than growing past it.
 template<class T, int N> class SmallVec {
 public:
   SmallVec() = default;

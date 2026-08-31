@@ -20,7 +20,7 @@ void naive_unary_backward(const Stream&, UnaryOp op,
                           const float* G, TensorView vg,
                           float* gX, int64_t n) {
   // X/Y may be null with a degenerate view when this op's derivative does not
-  // read that side (see unary_needs) -- the caller may have kept nothing else
+  // read that side (see unary_needs). the caller may have kept nothing else
   // alive for it, so it must not be dereferenced.
   const UnaryNeeds needs = unary_needs(op);
   const bool nx = needs_x(needs), ny = needs_y(needs);

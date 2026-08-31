@@ -79,6 +79,7 @@ int Tape::record_leaf(std::shared_ptr<AutogradMeta> m) {
   if (!m) throw std::invalid_argument("record_leaf: null meta");
 
   if (owns(*m)) {
+    // the same leaf tensor can be handed in more than once
     if (nodes_[m->node_id].leaf == m) return m->node_id;
 
     throw std::logic_error("record_leaf: tensor is already an op output");
@@ -105,15 +106,19 @@ void Tape::backward(const Tensor& loss, bool retain_graph) {
 
   NoGradScope no_grad;
 
+  // one gradient slot per node, indexed by node id; nodes are recorded in
+  // forward order, so a node's inputs always have smaller ids than the node
+  // itself and walking backward already visits every node after its
+  // consumers before the node itself.
   grads_.assign(nodes_.size(), Tensor{});
-  grads_[loss.meta()->node_id] = Tensor::scalar(1.0f, loss.device(), loss.dtype());
+  grads_[loss.meta()->node_id] = Tensor::scalar(1.0f, loss.device(), loss.dtype()); // d(loss)/d(loss) = 1
 
   std::vector<Tensor> g_in;
   g_in.reserve(4);
 
   for (int i{static_cast<int>(nodes_.size()) - 1}; i >= 0; --i) {
     if (!grads_[i].defined()) {
-      continue;
+      continue;  // nothing downstream of this node needed a gradient
     }
     if (nodes_[i].leaf) {
       Tensor& dst = nodes_[i].leaf->grad;
@@ -133,6 +138,9 @@ void Tape::backward(const Tensor& loss, bool retain_graph) {
           continue;
         }
         if (!grads_[input_id].defined()) {
+          // first gradient reaching this input, so pack() it into owned
+          // contiguous storage, since g_in[k] may just be a view (e.g. out of
+          // slice or expand's backward) that later add_inplace calls can't target.
           grads_[input_id] = g_in[k].pack();
         }
         else {

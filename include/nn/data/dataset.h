@@ -38,6 +38,7 @@ inline Shape sample_shape_of(const Tensor& t) {
   return Shape(std::span<const int>(dims, t.rank() - 1));
 }
 
+// a writable view of one row of a batch tensor, for Dataset::get to fill in
 template <class T>
 std::span<T> row_span(const Tensor& batch, int row) {
   static_assert(std::is_same_v<T, float> || std::is_same_v<T, int32_t>,

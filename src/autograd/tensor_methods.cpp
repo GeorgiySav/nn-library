@@ -1,5 +1,5 @@
 // Tensor's own differentiable surface, and the operators. Every definition
-// here is a one-line forward to nn::autograd -- the method spellings live
+// here is a one-line forward to nn::autograd. The method spellings live
 // separately from the functions they call so that adding an op means touching
 // the .def file and one implementation file, not both halves of a 500-line
 // translation unit.

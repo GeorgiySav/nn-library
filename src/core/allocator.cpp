@@ -15,6 +15,9 @@ namespace nn {
 
 namespace {
 
+// Raises the default mem pool's release threshold to the max, so freed CUDA
+// blocks are kept around for reuse instead of being handed back to the driver
+// on every free. Runs once per process.
 void configure_pool_once() {
   [[maybe_unused]] static const bool once = [] {
     int device = 0;
@@ -104,6 +107,9 @@ void copy_bytes(void* dst, Device dst_dev,
     cudaMemcpyAsync(dst, src, bytes, kind, cudaStream_t{nullptr})
   );
 
+  // Only block when copying back to the host. Device-to-device and
+  // host-to-device copies stay async, so the caller must not touch src again
+  // until the stream has otherwise been synchronized.
   if (dst_dev == Device::CPU) current_stream(Device::CUDA).synchronize();
 #else
   // Anything that reaches here has a CUDA endpoint, which cannot exist in a

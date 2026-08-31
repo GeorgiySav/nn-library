@@ -18,12 +18,10 @@ Tensor unary(UnaryOp op, const Tensor& x) {
 }
 
 Tensor unary_backward(UnaryOp op, const Tensor& x, const Tensor& y, const Tensor& g) {
-  // x is the forward input and y the forward output; unary_ops.def's Needs
-  // column says which (if either) this op's derivative reads, and the only
-  // caller -- autograd::unary -- passes an undefined placeholder for the one
-  // it did not keep alive. g always carries the true shape, device and dtype:
-  // a unary op never changes any of them, so it is the one side we can always
-  // trust even when both x and y are placeholders (Neg, Sign).
+  // x and y may be undefined placeholders: unary_ops.def's Needs column says
+  // which one (if either) this op's derivative actually reads, and the caller
+  // only keeps the one it needs alive. g always has the true shape, device
+  // and dtype, since a unary op never changes any of them.
   if (x.defined()) {
     same_device(x, g, kernels::unary_op_name(op));
     same_shape(x, g, kernels::unary_op_name(op));
@@ -48,6 +46,8 @@ Tensor unary_backward(UnaryOp op, const Tensor& x, const Tensor& y, const Tensor
 Tensor binary(BinaryOp op, const Tensor& a, const Tensor& b) {
   same_device(a, b, kernels::binary_op_name(op));
 
+  // expand_view broadcasts both operands up to the output shape with stride 0
+  // on the stretched axes, so the kernel just reads two same-shaped views.
   const Shape out_shape = broadcast_shapes(a.shape(), b.shape());
   const Tensor ea = a.expand_view(out_shape);
   const Tensor eb = b.expand_view(out_shape);
@@ -65,6 +65,8 @@ Tensor binary_backward(BinaryOp op, int side, const Tensor& a, const Tensor& b,
   const char* name = kernels::binary_op_name(op);
   same_shape(c, g, name);
 
+  // Add/Sub pass the gradient straight through (negated for Sub's right
+  // side), only summed back down if that operand was broadcast up to c.
   const Shape& target = (side == 0) ? a.shape() : b.shape();
   if (op == BinaryOp::Add || (op == BinaryOp::Sub && side == 0)) {
     return sum_to(g, target);

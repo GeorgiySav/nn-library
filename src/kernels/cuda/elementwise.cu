@@ -112,6 +112,8 @@ __global__ void fill_kernel(float v, float* X, int64_t n) {
 }
 
 __global__ void fill_from_kernel(const float* __restrict__ src, float* X, int64_t n) {
+  // src is a device scalar, read once per thread so the fill value never
+  // needs to round-trip through the host
   const float v = *src;
   for (int64_t i = blockIdx.x * blockDim.x + threadIdx.x;
        i < n;
@@ -135,6 +137,8 @@ __global__ void dropout_kernel(const float* __restrict__ X, TensorView vx,
        i < n;
        i += int64_t(gridDim.x) * blockDim.x) {
     const float u = random_uniform(seed, offset + uint64_t(i));
+    // scale (1/(1-p)) keeps the expected activation the same whether or not
+    // this element gets dropped
     Y[i] = (u >= p) ? X[offset_of(vx, i)] * scale : 0.0f;
   }
 }
@@ -143,6 +147,8 @@ __global__ void adam_step_kernel(float* __restrict__ p, const float* __restrict_
                                  float* __restrict__ m, float* __restrict__ v,
                                  float lr, float b1, float b2, float eps, float wd,
                                  float bc1, float bc2, int64_t n) {
+  // bc1/bc2 are the bias-correction terms (1 - b1^t, 1 - b2^t), computed once
+  // on the host since t is the same for every element
   for (int64_t i = blockIdx.x * blockDim.x + threadIdx.x;
        i < n;
        i += int64_t(gridDim.x) * blockDim.x) {

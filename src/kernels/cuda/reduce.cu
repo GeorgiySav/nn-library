@@ -23,6 +23,8 @@ __global__ void argmax_rows_kernel(const float* X, int32_t* out, int M, int N, i
     best = block_reduce(best, MaxKeepLowestIndex(), kIdentity);
 
     if (threadIdx.x == 0) out[row] = best.index;
+    // block_reduce's shared scratch buffer is reused every row this block
+    // handles, so all threads must finish reading it before the next iteration
     __syncthreads();
   }
 }
@@ -64,6 +66,7 @@ __global__ void topk_rows_kernel(const float* X, int M, int N, int k,
         indices[row * k + iter] = best.index;
         excluded[iter] = best.index;
       }
+      // every thread needs to see excluded[iter] before scanning again next iteration
       __syncthreads();
     }
   }
@@ -171,6 +174,8 @@ __global__ void sum_partials_kernel(const float* __restrict__ X, TensorView v,
   if (threadIdx.x == 0) partials[blockIdx.x] = acc;
 }
 
+// single block that folds the per-block partial sums from sum_partials_kernel
+// down to the final scalar
 __global__ void sum_finish_kernel(const float* __restrict__ partials,
                                   float* out, int m) {
   float acc = 0.0f;

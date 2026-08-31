@@ -76,8 +76,6 @@ Tensor embedding(const Tensor& weight, const Tensor& idx) {
   return out;
 }
 
-// Composed out of the ops above, so it records nothing of its own -- the tape
-// gets one node per step and the chain rule does the rest.
 Tensor layer_norm(const Tensor& x, const Tensor& weight, const Tensor& bias, float eps) {
   const int last = x.shape().rank() - 1;
   const Tensor centred = binary(ops::BinaryOp::Sub, x, mean(x, last, /*keepdim=*/true));
@@ -102,17 +100,12 @@ Tensor rms_norm(const Tensor& x, const Tensor& weight, float eps) {
   return out;
 }
 
-// Likewise composed: keep * x + value * mask. The mask itself carries no
-// gradient, so the two scalar ops run through nn::ops and stay off the tape.
 Tensor masked_fill(const Tensor& x, const Tensor& mask, float value) {
   const Tensor keep = ops::scalar(ops::ScalarOp::RsubScalar, mask, 1.0f);
   const Tensor fill = ops::scalar(ops::ScalarOp::MulScalar, mask, value);
   return binary(ops::BinaryOp::Add, binary(ops::BinaryOp::Mul, x, keep), fill);
 }
 
-// Composed the same way as masked_fill above: softmax(q @ k^T / sqrt(dk) [+
-// mask]) @ v, entirely out of matmul/scalar/softmax/dropout/masked_fill, so
-// it records nothing of its own on the tape.
 Tensor scaled_dot_product_attention(const Tensor& q, const Tensor& k, const Tensor& v,
                                     const Tensor& mask, float dropout_p, bool is_causal,
                                     bool training) {
@@ -140,9 +133,6 @@ Tensor scaled_dot_product_attention(const Tensor& q, const Tensor& k, const Tens
   Tensor scores = mul_scalar(matmul(q, k, false, true), 1.0f / std::sqrt(float(dk)));
 
   if (is_causal || mask.defined()) {
-    // Built with plain ops:: calls -- like masked_fill's own keep/fill --
-    // since neither the causal mask nor a caller-supplied mask ever needs a
-    // gradient, so combining them shouldn't cost a tape node.
     Tensor keep = is_causal ? tril_mask(Tq, q.device()) : Tensor();
     if (mask.defined()) {
       keep = keep.defined() ? ops::binary(ops::BinaryOp::Mul, mask, keep) : mask;

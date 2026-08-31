@@ -14,7 +14,10 @@ struct Allocator {
 
 Allocator& allocator_for(Device d);
 
-// copies raw bytes between two devices
+// Copies raw bytes between two devices (or within one). Blocks only when the
+// destination is the host; a host-to-device or device-to-device copy is
+// queued asynchronously, so src must stay valid until the caller
+// synchronizes.
 void copy_bytes(void* dst, Device dst_dev,
                 const void* src, Device src_dev, size_t bytes);
 

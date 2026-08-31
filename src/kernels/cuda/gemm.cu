@@ -44,7 +44,7 @@ constexpr int BK = 16; // depth of one tile
 constexpr int TM = 4;  // rows of C per thread
 constexpr int TN = 4;  // cols of C per thread
 
-constexpr int kPad = 4;
+constexpr int kPad = 4; // padding on the shared tiles avoids bank conflicts
 
 }
 
@@ -105,7 +105,7 @@ __global__ void gemm_kernel(const float* __restrict__ A, const float* __restrict
                    : 0.0f;
       }
 
-      __syncthreads();
+      __syncthreads();  // wait for the whole tile to land in shared memory before reading it
 
       #pragma unroll
       for (int k = 0; k < BK; ++k) {
@@ -120,7 +120,7 @@ __global__ void gemm_kernel(const float* __restrict__ A, const float* __restrict
           for (int j = 0; j < TN; ++j) acc[i][j] = fmaf(a[i], b[j], acc[i][j]);
       }
 
-      __syncthreads();
+      __syncthreads();  // wait for every thread to finish reading before the next k0 overwrites the tile
     }
 
     #pragma unroll
@@ -131,6 +131,8 @@ __global__ void gemm_kernel(const float* __restrict__ A, const float* __restrict
       const int64_t off = m * ldc + n0;
 
       const int64_t abs_off = int64_t(bi) * sc + off;
+      // float4 store only when the full 4 columns are in bounds and the
+      // address is 16-byte aligned; otherwise fall back to scalar stores
       if (n0 + TN <= N && (abs_off & 3) == 0) {
         *reinterpret_cast<float4*>(&Cb[off]) =
           float4{acc[i][0], acc[i][1], acc[i][2], acc[i][3]};
@@ -140,7 +142,7 @@ __global__ void gemm_kernel(const float* __restrict__ A, const float* __restrict
           if (n0 + j < N) Cb[off + j] = acc[i][j];
       }
     }
-    __syncthreads();
+    __syncthreads();  // wait for the store before the next batch iteration reuses As/Bs
   }
 }
 

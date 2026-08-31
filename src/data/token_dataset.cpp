@@ -13,6 +13,8 @@ std::vector<int32_t> load_tokens(const std::string& path) {
 
   const std::streamoff bytes = in.tellg();
   if (bytes < 0 || bytes % 4 != 0) {
+    // tokens are stored as raw int32_t, so a size that isn't a multiple of 4
+    // means the file is truncated or not a token file at all
     throw std::runtime_error("load_tokens: file size is not a multiple of 4: " + path);
   }
 
@@ -24,6 +26,9 @@ std::vector<int32_t> load_tokens(const std::string& path) {
   return ids;
 }
 
+// mio::mmap_source is kept behind a pimpl so <mio/mio.hpp> stays out of
+// token_dataset.h and out of every translation unit that just wants to read
+// tokens.
 struct MappedTokens::Impl {
   mio::mmap_source file;
 };
@@ -42,6 +47,9 @@ MappedTokens::~MappedTokens() = default;
 MappedTokens::MappedTokens(MappedTokens&&) noexcept = default;
 MappedTokens& MappedTokens::operator=(MappedTokens&&) noexcept = default;
 
+// the mapping is never copied into RAM here, so this reinterprets the raw
+// mapped bytes directly as int32_t tokens (the file must already be
+// little-endian, native-alignment int32 data)
 std::span<const int32_t> MappedTokens::tokens() const {
   return {reinterpret_cast<const int32_t*>(impl_->file.data()), impl_->file.size() / 4};
 }

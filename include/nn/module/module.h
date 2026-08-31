@@ -18,7 +18,10 @@ public:
     throw std::logic_error("Module::forward(x): not implemented for this module");
   }
 
-  // name what you own, under the path you were given.
+  // Appends this module's own parameters (not its children's) to out, naming
+  // each with prefix. Containers call this recursively on their sub-modules
+  // with an extended prefix, which is how named_parameters() below builds a
+  // flat, dotted list for the whole model.
   virtual void collect_named(const std::string& prefix,
                             std::vector<NamedTensor>& out) = 0;
 

@@ -133,7 +133,7 @@ Tensor Tensor::pack() const {
 bool Tensor::is_contiguous() const {
   int64_t expected_stride = 1;
   for (int i = shape_.rank() - 1; i >= 0; --i) {
-    if (shape_.dim(i) == 1) continue; // stride doesn't matter for size-1 dims
+    if (shape_.dim(i) == 1) continue; // a size-1 axis can carry any stride
     if (strides_.at(i) != expected_stride) return false;
     expected_stride *= shape_.dim(i);
   }
@@ -316,6 +316,9 @@ void Tensor::zero_grad(bool set_to_none) {
   }
 }
 
+// Builds the kernel-facing view: drops size-1 axes and merges an axis into
+// its neighbor whenever they are contiguous with each other, so kernels see
+// the smallest rank that still describes the same memory layout.
 TensorView view_of(const Tensor& t) {
   TensorView v;
   for (int i = 0; i < t.shape().rank(); ++i) {

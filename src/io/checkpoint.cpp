@@ -31,8 +31,8 @@ constexpr char kMagic[4] = {'N', 'N', 'C', 'K'};
 
 int64_t align8(int64_t n) { return (n + 7) & ~int64_t(7); }
 
-// Every write and read goes through these, so a truncated file is caught at the
-// point it runs out rather than producing plausible garbage further on.
+// every write and read goes through these, so a truncated file is caught at
+// the point it runs out rather than producing plausible garbage further on
 template <class T>
 void put(std::ostream& os, const T& v) {
   static_assert(std::is_trivially_copyable_v<T>);
@@ -233,8 +233,8 @@ void load(const std::string& path,
                                dst.shape().str() + " in the model");
     }
 
-    // Staged on the host, then copied to wherever this tensor lives, so the
-    // file says nothing about devices.
+    // staged on the host, then copied to wherever this tensor lives, so the
+    // file format says nothing about devices
     Tensor staging(e.shape, Device::CPU, e.dtype);
     is.seekg(std::streamoff(e.offset));
     is.read(static_cast<char*>(staging.raw()), std::streamsize(e.nbytes));
@@ -297,12 +297,12 @@ void save_checkpoint(const std::string& path, Module& model,
 
 int64_t load_checkpoint(const std::string& path, Module& model,
                         optim::Optimizer& opt) {
-  // Lets an optimiser with lazily-allocated state (AdamW's m/v moments)
+  // Lets an optimizer with lazily allocated state (AdamW's m/v moments)
   // pre-allocate exactly the entries this file has, before collect_state()
-  // (inside run_state, below) hands out pointers for load() to fill --
-  // otherwise load() would be asked for a moment tensor the file
-  // legitimately never wrote (a block that hadn't been sampled yet when
-  // this checkpoint was saved).
+  // (inside run_state, below) hands out pointers for load() to fill.
+  // Otherwise load() would be asked to fill a moment tensor the file
+  // legitimately never wrote, because that block hadn't been sampled yet
+  // when the checkpoint was saved.
   std::unordered_set<std::string> available;
   for (std::string& name : tensor_names(path)) available.insert(std::move(name));
   opt.prepare_for_load("opt.", available);

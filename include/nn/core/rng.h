@@ -6,8 +6,12 @@
 
 namespace nn {
 
+// PCG32 pseudo-random generator: small state, decent statistical quality,
+// and cheap enough to call per-element in init kernels.
 class Pcg32 {
 public:
+  // Standard PCG seeding sequence: step once on a zero state so the seed
+  // can't just cancel out, then fold it in and step again.
   explicit Pcg32(uint64_t seed = 0) {
     state_ = 0;
     inc_ = (seed << 1u) | 1u;
@@ -29,7 +33,9 @@ public:
     return static_cast<float>(next_uint32()) / static_cast<float>(UINT32_MAX);
   }
 
-  float next_normal() { // mean = 0, stddev = 1
+  // mean = 0, stddev = 1. Box-Muller produces two independent normals per
+  // pair of uniforms; the second is stashed and returned on the next call.
+  float next_normal() {
     if (has_spare_) {
       has_spare_ = false;
       return spare_;
@@ -60,7 +66,8 @@ private:
 };
 
 
-// The global counter every stochastic op draws from
+// Process-wide seed and draw counter that stochastic ops use when no
+// explicit Pcg32 is passed in, so a run is reproducible from (seed, counter).
 namespace detail {
 inline std::atomic<uint64_t>& rng_seed() {
   static std::atomic<uint64_t> s{0x853c49e6748fea9bULL};

@@ -27,6 +27,8 @@ public:
     }
   }
 
+  // one extra token beyond the window is needed for y (the window shifted
+  // by one), hence window_ + 1 here
   int size() const override {
     return int((count_ - window_ - 1) / stride_) + 1;
   }

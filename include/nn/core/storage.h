@@ -6,6 +6,9 @@
 
 namespace nn {
 
+// Owns one raw device allocation for its entire lifetime; freed on
+// destruction through the allocator for `device_`. Not copyable, and not
+// movable to another device, since Tensor shares it by std::shared_ptr.
 class Storage {
 public:
   Storage(size_t bytes, Device d);

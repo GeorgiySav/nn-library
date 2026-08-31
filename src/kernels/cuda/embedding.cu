@@ -21,9 +21,12 @@ __global__ void embedding_kernel(const float* __restrict__ W,
   for (int64_t t = blockIdx.x * int64_t(blockDim.x) + threadIdx.x;
        t < total;
        t += int64_t(gridDim.x) * blockDim.x) {
+    // t is a flat index over (row, feature); recover both from it since one
+    // thread may need to service several rows worth of features
     const int64_t row = t / D;
     const int d = int(t - row * D);
     const int32_t v = idx[row];
+    // out-of-range ids (e.g. padding) read as zero instead of faulting
     Y[t] = (v < 0 || v >= V) ? 0.0f : W[int64_t(v) * D + d];
   }
 }
@@ -39,6 +42,8 @@ __global__ void embedding_backward_kernel(const float* __restrict__ G,
     const int d = int(t - row * D);
     const int32_t v = idx[row];
     if (v < 0 || v >= V) continue;
+    // atomic because different rows can share the same vocab id, so their
+    // gradients must accumulate rather than overwrite each other
     atomicAdd(&gW[int64_t(v) * D + d], G[t]);
   }
 }

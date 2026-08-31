@@ -1,7 +1,7 @@
 #pragma once
 
-// The arithmetic of every elementwise op lives one struct per op in
-// unary_ops_traits.h / binary_ops_traits.h / scalar_ops_traits.h, each
+// the arithmetic of every elementwise op lives one struct per op in
+// unary_ops_traits.h, binary_ops_traits.h and scalar_ops_traits.h, each
 // compiled into both backends via NN_EW_INLINE.
 
 #include <kernels/ew_inline.h>
@@ -13,7 +13,7 @@
 namespace nn::kernels {
 
 // Accum, UnaryOp, BinaryOp and ScalarOp are declared in <nn/ops/op_enums.h>
-// and aliased into this namespace there -- the codes are public vocabulary,
+// and aliased into this namespace there. the codes are public vocabulary,
 // only the arithmetic below is private.
 
 NN_EW_INLINE float apply_accum(Accum a, float x) {
@@ -29,14 +29,14 @@ NN_EW_INLINE float apply_unary(UnaryOp op, float x) {
   return unary_ops::All::fwd(op, x);
 }
 
-// y is the forward result and g the incoming gradient. Callers that already
+// y is the forward result and g the incoming gradient. callers that already
 // know this op's Needs (autograd::unary, the backward kernel drivers) may
 // pass 0.0f for whichever of x/y this op does not read.
 NN_EW_INLINE float apply_unary_backward(UnaryOp op, float x, float y, float g) {
   return unary_ops::All::bwd(op, x, y, g);
 }
 
-// Host-side only: this decides what a Tensor closure keeps alive and what a
+// host side only. decides what a Tensor closure keeps alive and what a
 // kernel driver reads before launch, neither of which happens on the device.
 inline UnaryNeeds unary_needs(UnaryOp op) {
   return unary_ops::All::needs(op);
@@ -46,7 +46,7 @@ NN_EW_INLINE float apply_binary(BinaryOp op, float a, float b) {
   return binary_ops::All::fwd(op, a, b);
 }
 
-// side 0 -> d/da, side 1 -> d/db. c is the forward result.
+// side 0 selects d/da, side 1 selects d/db. c is the forward result.
 NN_EW_INLINE float apply_binary_backward(BinaryOp op, int side,
                                          float a, float b, float c, float g) {
   return side == 0 ? binary_ops::All::dfda(op, a, b, c, g)
@@ -61,7 +61,7 @@ NN_EW_INLINE float apply_scalar_backward(ScalarOp op, float x, float y, float g,
   return scalar_ops::All::bwd(op, x, y, g, k);
 }
 
-// Names, for error messages and tests. Indexed by the enum's value.
+// names, for error messages and tests. indexed by the enum's value.
 inline const char* unary_op_name(UnaryOp op) {
   switch (op) {
 #define NN_UNARY(Name, method) case UnaryOp::Name: return #method;

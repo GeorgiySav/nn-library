@@ -1,7 +1,7 @@
 #pragma once
 
-#include <cstddef>   // size_t
-#include <cstdint>   // int32_t
+#include <cstddef>
+#include <cstdint>
 
 namespace nn {
 

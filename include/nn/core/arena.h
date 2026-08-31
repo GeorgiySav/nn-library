@@ -7,6 +7,10 @@
 
 namespace nn {
 
+// Bump allocator over a growable list of blocks. Individual allocations are
+// never freed; reset() rewinds to the start without releasing the blocks, so
+// the same backing memory can be reused across repeated passes (e.g. one
+// arena per forward pass). release() actually frees everything.
 class Arena {
 public:
   explicit Arena(size_t block_bytes = 64 * 1024) : block_bytes_(block_bytes) {}
@@ -18,6 +22,8 @@ public:
   Arena& operator=(Arena&&) = default;
 
   void* alloc(size_t bytes, size_t align) {
+    // Scan forward from the current block (not always block 0, since a
+    // previous alloc may have moved on) for one with room left.
     for (; block_ < blocks_.size(); ++block_, offset_ = 0) {
       Block& b = blocks_[block_];
       const auto base = reinterpret_cast<uintptr_t>(b.data.get());
@@ -29,6 +35,8 @@ public:
       }
     }
 
+    // Nothing left fits; grow by a new block sized for this request if it
+    // wouldn't fit in a default-sized block.
     const size_t want = bytes + align;
     add_block((want > block_bytes_) ? want : block_bytes_);
     return alloc(bytes, align);
@@ -50,6 +58,7 @@ private:
     size_t size;
   };
 
+  // a must be a power of two.
   static uintptr_t align_up(uintptr_t n, size_t a) {
     return (n + a - 1) & ~(static_cast<uintptr_t>(a) - 1);
   }

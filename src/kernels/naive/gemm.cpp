@@ -12,6 +12,9 @@ namespace {
 //   transA=true   A is [K,M]  A[k*lda + m]   lda >= M
 //   transB=false  B is [K,N]  B[k*ldb + n]   ldb >= N
 //   transB=true   B is [N,K]  B[n*ldb + k]   ldb >= K
+// k in the middle loop so each pass over n reads B and accumulates into C
+// contiguously; a is loaded once per k iteration since A is read row-major
+// with a fixed row per m.
 void gemm_nn(const float* A, const float* B, float* C, int M, int N, int K,
              int64_t lda, int64_t ldb, int64_t ldc) {
   for (int m = 0; m < M; ++m) {
@@ -25,6 +28,10 @@ void gemm_nn(const float* A, const float* B, float* C, int M, int N, int K,
   }
 }
 
+// both A and B are read row-major here (B transposed means its rows are the
+// N dimension), so each output element is a straight dot product of two
+// contiguous runs; fp reassociate is allowed since the sum order doesn't
+// need to match gemm_nn's for correctness, only for bit-exact reproduction.
 void gemm_nt(const float* A, const float* B, float* C, int M, int N, int K,
              int64_t lda, int64_t ldb, int64_t ldc) {
   #pragma clang fp reassociate(on)
@@ -39,6 +46,10 @@ void gemm_nt(const float* A, const float* B, float* C, int M, int N, int K,
   }
 }
 
+// A transposed means its rows are the K dimension, so k has to be the
+// outermost loop to read A row-major; C is zeroed up front in a separate
+// pass since it's now accumulated across k rather than within one row at a
+// time.
 void gemm_tn(const float* A, const float* B, float* C, int M, int N, int K,
              int64_t lda, int64_t ldb, int64_t ldc) {
   for (int m = 0; m < M; ++m) {
@@ -54,6 +65,9 @@ void gemm_tn(const float* A, const float* B, float* C, int M, int N, int K,
   }
 }
 
+// both operands transposed, so neither A nor B can be walked row-major for
+// a fixed m, n; A is read with stride lda per k here, the one layout this
+// file can't avoid a strided inner access for.
 void gemm_tt(const float* A, const float* B, float* C, int M, int N, int K,
              int64_t lda, int64_t ldb, int64_t ldc) {
   for (int m = 0; m < M; ++m) {

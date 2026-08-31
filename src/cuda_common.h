@@ -18,6 +18,8 @@
 #ifdef NDEBUG
   #define NN_CUDA_CHECK_LAUNCH(stream) NN_CUDA_CHECK(cudaGetLastError())
 #else
+  // debug builds sync after every launch so a kernel error is caught at its
+  // own call site instead of surfacing at some unrelated later sync point
   #define NN_CUDA_CHECK_LAUNCH(stream) \
     do {\
       NN_CUDA_CHECK(cudaGetLastError()); \
