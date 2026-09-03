@@ -7,6 +7,7 @@
 
 #include <nn/core/rng.h>
 #include <nn/core/dtype.h>
+#include <nn/core/bf16.h>
 #include <nn/core/shape.h>
 #include <nn/core/storage.h>
 #include <nn/core/strides.h>
@@ -65,6 +66,7 @@ public:
   // host unless device() == Device::CPU. For passing to kernels only.
   float* device_ptr() const;
   int32_t* device_ptr_i32() const;
+  bf16* device_ptr_bf16() const;
 
   // Dereferenceable host pointer. Requires device() == Device::CPU. For a
   // device tensor, call .to(Device::CPU) and keep the result alive.

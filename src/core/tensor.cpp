@@ -231,6 +231,11 @@ int32_t* Tensor::device_ptr_i32() const {
   return static_cast<int32_t*>(storage_->data()) + offset_;
 }
 
+bf16* Tensor::device_ptr_bf16() const {
+  assert(dtype_ == DType::BF16);
+  return static_cast<bf16*>(storage_->data()) + offset_;
+}
+
 float* Tensor::host_data() const {
   assert(device() == Device::CPU &&
          "host_data() on a device tensor; use .to(Device::CPU)");
